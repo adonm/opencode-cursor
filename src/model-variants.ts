@@ -63,12 +63,25 @@ export function buildModelVariants(item: ModelListItem): Record<string, CursorVa
   const defaults = defaultModelParams(item);
 
   const sdkVariants = item.variants ?? [];
-  if (sdkVariants.length > 0) {
+  const nonDefault = sdkVariants.filter((v) => v.isDefault !== true);
+  // Some models return every variant with the SAME displayName (the model's own
+  // name), differing only in params — e.g. grok-4.5 returns six "Cursor Grok
+  // 4.5" presets that vary only in `effort`/`fast`. Those presets carry no
+  // distinguishing label, so keying off the displayName yields meaningless
+  // numbered collisions ("cursor-grok-4-5", "cursor-grok-4-5-2", …) that surface
+  // in the picker as bogus "thinking levels". Detect that case (multiple presets
+  // collapsing to one displayName) and fall through to deriving variants from
+  // the model's parameters (effort enum + `fast` toggle) instead. Presets with
+  // genuinely distinct labels — even ones that slugify alike ("Deep Think" vs
+  // "Deep-Think") — are still honored via the collision counter below.
+  const unlabeledPresets =
+    nonDefault.length > 1 &&
+    new Set(nonDefault.map((v) => v.displayName)).size === 1;
+  if (nonDefault.length > 0 && !unlabeledPresets) {
     // Cursor-authoritative presets win: displayName + isDefault are curated
     // upstream; we only pin the non-reasoning boolean floors underneath.
     const out: Record<string, CursorVariant> = {};
-    for (const v of sdkVariants) {
-      if (v.isDefault === true) continue; // the base model entry IS this variant
+    for (const v of nonDefault) {
       const params: Record<string, string> = { ...defaults };
       for (const p of v.params ?? []) params[p.id] = p.value;
       const key = variantKey(v.displayName);

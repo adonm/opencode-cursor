@@ -275,6 +275,35 @@ describe("buildModelVariants", () => {
     expect(Object.keys(variants).sort()).toEqual(["deep-think", "deep-think-2", "deep-think-3"]);
   });
 
+  it("derives param variants when SDK presets all share one displayName (grok-4.5)", () => {
+    // Regression: Cursor returns six grok-4.5 variants all named "Cursor Grok
+    // 4.5", differing only in effort/fast. Keying off displayName produced bogus
+    // "cursor-grok-4-5", "cursor-grok-4-5-2", … entries in the picker. Unlabeled
+    // presets must fall back to param-derived keys (effort enum + fast toggle).
+    const item = {
+      id: "grok-4.5",
+      displayName: "Cursor Grok 4.5",
+      parameters: [
+        { id: "effort", values: [{ value: "low" }, { value: "medium" }, { value: "high" }] },
+        { id: "fast", values: [{ value: "false" }, { value: "true" }] },
+      ],
+      variants: [
+        { params: [{ id: "effort", value: "low" }, { id: "fast", value: "false" }], displayName: "Cursor Grok 4.5" },
+        { params: [{ id: "effort", value: "low" }, { id: "fast", value: "true" }], displayName: "Cursor Grok 4.5" },
+        { params: [{ id: "effort", value: "medium" }, { id: "fast", value: "false" }], displayName: "Cursor Grok 4.5" },
+        { params: [{ id: "effort", value: "medium" }, { id: "fast", value: "true" }], displayName: "Cursor Grok 4.5" },
+        { params: [{ id: "effort", value: "high" }, { id: "fast", value: "false" }], displayName: "Cursor Grok 4.5" },
+        { params: [{ id: "effort", value: "high" }, { id: "fast", value: "true" }], displayName: "Cursor Grok 4.5", isDefault: true },
+      ],
+    } as unknown as ModelListItem;
+    const variants = buildModelVariants(item);
+    // Meaningful, param-derived keys — never the "cursor-grok-4-5-N" garbage.
+    expect(Object.keys(variants)).toEqual(["low", "medium", "high", "fast"]);
+    expect(Object.keys(variants).some((k) => k.startsWith("cursor-grok"))).toBe(false);
+    expect(variants["high"]?.params).toEqual({ effort: "high", fast: "false" });
+    expect(variants["fast"]?.params).toEqual({ fast: "true" });
+  });
+
   it("falls back to generated variants when SDK variants absent", () => {
     const item = {
       id: "m", displayName: "m",
