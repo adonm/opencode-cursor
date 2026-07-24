@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-24
+
+- **Fixed: reasoning/thinking variants showed as meaningless numbered entries for
+  most models.** Cursor returns every variant of a model with the same
+  `displayName` (the model's own name), so the SDK-authoritative variant path
+  (0.5.0) keyed off it and emitted collision-numbered junk — e.g. `grok-4.5` →
+  `cursor-grok-4-5`, `cursor-grok-4-5-2` … `-5`; `claude-opus-4-8` →
+  `opus-4-8-2` … `-39` — which the global model cache surfaced in the picker of
+  every project. ~20 of 32 models were affected. Same-named presets now fall
+  back to param-derived keys (`low`/`medium`/`high`/`xhigh`/`max`/`fast`);
+  presets with genuinely distinct labels are still honored.
+
 ## [0.6.0] — 2026-07-24
 
 Native Cursor subagents: the Cursor agent's `task` tool now renders as a
