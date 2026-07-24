@@ -498,11 +498,19 @@ export class CursorLanguageModel implements LanguageModelV3 {
 	async doStream(options: LanguageModelV3CallOptions): Promise<{
 		stream: ReadableStream<LanguageModelV3StreamPart>;
 	}> {
+		// Parent opencode session id (same source agentRun reads) so a Cursor
+		// subagent's `task` part can be linked to a real opencode child session.
+		const po = options.providerOptions?.[this.provider] as
+			| Record<string, unknown>
+			| undefined;
+		const sessionID =
+			typeof po?.["sessionID"] === "string"
+				? (po["sessionID"] as string)
+				: undefined;
 		return {
-			stream: cursorEventsToStream(
-				this.agentRun(options),
-				this.config.toolDisplay,
-			),
+			stream: cursorEventsToStream(this.agentRun(options), this.config.toolDisplay, {
+				sessionID,
+			}),
 		};
 	}
 

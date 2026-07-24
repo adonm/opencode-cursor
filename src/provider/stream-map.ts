@@ -5,6 +5,38 @@ import type {
 	LanguageModelV3Usage,
 } from "@ai-sdk/provider";
 import type { CursorEvent, CursorUsage } from "./agent-events.js";
+import { linkSubagentSession } from "./subagent-bridge.js";
+
+/** Per-turn context threaded from the language model into the stream mapper. */
+export interface StreamContext {
+	/** Parent opencode session id, used to link Cursor subagents as children. */
+	sessionID?: string;
+}
+
+/** Cursor's subagent tool name (the `task` tool-call/tool-result event name). */
+const TASK_TOOL_NAME = "task";
+
+/**
+ * Inject a linked child-session id into an already-folded `task` tool-result
+ * part so the TUI renders the card as clickable / `ctrl+x`-navigable. The
+ * folded result object lives on `part.result` ({@link nativeToolResult}); its
+ * `metadata` is a fresh object per call, so mutation here is safe.
+ */
+function injectSubagentSessionId(
+	parts: BlockToolPart[],
+	sessionId: string,
+): void {
+	for (const part of parts) {
+		if (part.type !== "tool-result" || part.toolName !== "task") continue;
+		const folded = (part as { result?: unknown }).result;
+		if (!isRecord(folded)) continue;
+		const metadata = isRecord(folded["metadata"])
+			? (folded["metadata"] as Record<string, unknown>)
+			: {};
+		metadata["sessionId"] = sessionId;
+		(folded as Record<string, unknown>)["metadata"] = metadata;
+	}
+}
 
 /**
  * How Cursor's internal tool activity (shell/read/edit/mcp/…) is surfaced to
@@ -156,6 +188,20 @@ function successValue(result: unknown): unknown {
 	return isRecord(result) && result["status"] === "success"
 		? result["value"]
 		: undefined;
+}
+
+/**
+ * The opencode `task` input's `subagent_type` field, or `{}` to omit it. Prefers
+ * Cursor's real subagent `name`; accepts a `kind` only when it isn't the proto
+ * zero-value `"unspecified"` (which the TUI would titlecase to "Unspecified
+ * Task"). Omitting the field makes the TUI fall back to "General Task".
+ */
+function subagentTypeField(args: unknown): { subagent_type?: string } {
+	const sub = isRecord(args) ? args["subagentType"] : undefined;
+	const name = strField(sub, "name");
+	const kind = strField(sub, "kind");
+	const subagent = name ?? (kind && kind !== "unspecified" ? kind : undefined);
+	return subagent ? { subagent_type: subagent } : {};
 }
 
 /** The `{title, metadata, output}` shape opencode folds into a tool part's state. */
@@ -556,19 +602,16 @@ const NATIVE_ADAPTERS: Record<string, NativeToolAdapter> = {
 		},
 	},
 	// Cursor `task` (subagent) → opencode `task` (agent card: name + description).
-	// Non-clickable here — the subagent ran inside Cursor, not as an opencode
-	// child session — but the native card reads far better than raw JSON.
+	// Made navigable in the stream layer: when a parent session + the plugin
+	// bridge are present, a real opencode child session is created and its id is
+	// stamped onto this result's `metadata.sessionId` (see cursorEventsToStream's
+	// tool-result path). Without that link it degrades to a non-navigable card.
 	task: {
 		tool: "task",
-		input: (args) => {
-			const description = strField(args, "description") ?? "";
-			const sub = isRecord(args) ? args["subagentType"] : undefined;
-			const subagent =
-				strField(sub, "name") ?? strField(sub, "kind") ?? undefined;
-			return subagent
-				? { description, subagent_type: subagent }
-				: { description };
-		},
+		input: (args) => ({
+			description: strField(args, "description") ?? "",
+			...subagentTypeField(args),
+		}),
 		result: (value, args) => {
 			const description = strField(args, "description") ?? "";
 			const suffix = strField(value, "resultSuffix");
@@ -1029,6 +1072,7 @@ const DANGLING_TOOL_RESULT = {
 export function cursorEventsToStream(
 	events: AsyncIterable<CursorEvent>,
 	toolDisplay: ToolDisplay = "blocks",
+	ctx: StreamContext = {},
 ): ReadableStream<LanguageModelV3StreamPart> {
 	return new ReadableStream<LanguageModelV3StreamPart>({
 		async start(controller) {
@@ -1183,6 +1227,13 @@ export function cursorEventsToStream(
 						case "tool-result":
 							if (toolState.dropped.delete(event.id)) break;
 							if (toolDisplay === "blocks") {
+								// Capture the original call args before blockToolResultParts
+								// clears the open-tool entry — the subagent link needs the
+								// task description/prompt, which live on the call, not result.
+								const taskArgs =
+									event.name === TASK_TOOL_NAME
+										? toolState.open.get(event.id)?.args
+										: undefined;
 								const parts = blockToolResultParts(
 									event.id,
 									event.name,
@@ -1193,6 +1244,23 @@ export function cursorEventsToStream(
 								if (parts.length > 0) {
 									closeText();
 									closeReasoning();
+								}
+								// A Cursor subagent ran inside Cursor (no opencode child
+								// session). Create a real child session now and point the task
+								// card at it so it's clickable / ctrl+x-navigable. Best-effort:
+								// linkSubagentSession swallows all failures and returns
+								// undefined, leaving the card exactly as before.
+								if (
+									event.name === TASK_TOOL_NAME &&
+									!event.isError &&
+									ctx.sessionID
+								) {
+									const childId = await linkSubagentSession({
+										parentSessionID: ctx.sessionID,
+										args: taskArgs,
+										result: event.result,
+									});
+									if (childId) injectSubagentSessionId(parts, childId);
 								}
 								for (const part of parts) {
 									controller.enqueue(part);

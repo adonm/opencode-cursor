@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import type { CursorEvent } from "../src/provider/agent-events.js";
 import {
@@ -6,6 +6,10 @@ import {
 	cursorEventsToStream,
 	mapUsage,
 } from "../src/provider/stream-map.js";
+import {
+	clearSubagentBridge,
+	setSubagentBridge,
+} from "../src/provider/subagent-bridge.js";
 
 async function* gen(events: CursorEvent[]): AsyncGenerator<CursorEvent> {
 	for (const e of events) yield e;
@@ -1140,6 +1144,25 @@ describe("native tool mapping (blocks)", () => {
 		});
 	});
 
+	it("omits subagent_type for Cursor's zero-value `unspecified` kind", async () => {
+		const { call } = await mapTool(
+			"task",
+			{
+				description: "Pull current branch",
+				prompt: "pull",
+				subagentType: { kind: "unspecified" },
+			},
+			{ status: "success", value: { isBackground: false } },
+		);
+		// No subagent_type → the TUI renders "General Task", never "Unspecified".
+		expect(call).toMatchObject({
+			toolName: "task",
+			input: JSON.stringify({ description: "Pull current branch" }),
+		});
+	});
+
+
+
 	it("formats Cursor `readLints` as a `cursor_readLints` diagnostics list", async () => {
 		const { call, result } = await mapTool(
 			"readLints",
@@ -1547,5 +1570,129 @@ describe("finish providerMetadata", () => {
 			providerMetadata?: unknown;
 		};
 		expect(finish.providerMetadata).toBeUndefined();
+	});
+});
+
+describe("subagent child-session linking (blocks)", () => {
+	afterEach(() => clearSubagentBridge());
+
+	const taskEvents: CursorEvent[] = [
+		{
+			type: "tool-call",
+			id: "t1",
+			name: "task",
+			input: {
+				description: "Pull current branch",
+				prompt: "pull dev",
+				subagentType: { kind: "unspecified" },
+			},
+		},
+		{
+			type: "tool-result",
+			id: "t1",
+			name: "task",
+			result: {
+				status: "success",
+				value: { isBackground: false, durationMs: 5000, resultSuffix: "done" },
+			},
+			isError: false,
+		},
+		{ type: "finish" },
+	];
+
+	const foldedMetadata = (part: LanguageModelV3StreamPart) =>
+		(part as unknown as { result: { metadata?: Record<string, unknown> } })
+			.result.metadata ?? {};
+
+	// Minimal opencode client stub capturing the create/prompt calls the bridge
+	// makes; returns a fake child session id.
+	function stubClient(childId = "ses_child") {
+		const calls: { create: unknown[]; prompt: unknown[] } = {
+			create: [],
+			prompt: [],
+		};
+		const client = {
+			session: {
+				create: async (opts: unknown) => {
+					calls.create.push(opts);
+					return { data: { id: childId } };
+				},
+				prompt: async (opts: unknown) => {
+					calls.prompt.push(opts);
+					return { data: {} };
+				},
+			},
+		};
+		return { client, calls };
+	}
+
+	it("creates a child session and stamps sessionId on the task result", async () => {
+		const { client, calls } = stubClient();
+		setSubagentBridge({
+			client: client as never,
+			directory: "/repo",
+		});
+		const parts = await collect(
+			cursorEventsToStream(gen(taskEvents), "blocks", {
+				sessionID: "ses_parent",
+			}),
+		);
+		const result = toolResults(parts)[0]!;
+		expect(result).toMatchObject({ toolName: "task" });
+		// The linked child session id makes the card clickable / ctrl+x-navigable.
+		expect(foldedMetadata(result)).toMatchObject({ sessionId: "ses_child" });
+		// Child created under the parent with the "(@agent subagent)" title, then
+		// seeded with the prompt + transcript (two noReply prompts).
+		expect(calls.create[0]).toMatchObject({
+			body: { parentID: "ses_parent", title: expect.stringContaining("(@") },
+			query: { directory: "/repo" },
+		});
+		expect(calls.prompt.length).toBe(2);
+		// The transcript message carries Cursor's result + its real duration.
+		const transcript = calls.prompt[1] as {
+			body: { parts: Array<{ text: string }> };
+		};
+		expect(transcript.body.parts[0]!.text).toContain("done");
+		expect(transcript.body.parts[0]!.text).toContain("5.0s");
+	});
+
+	it("degrades to a non-navigable card when no bridge is published", async () => {
+		const parts = await collect(
+			cursorEventsToStream(gen(taskEvents), "blocks", {
+				sessionID: "ses_parent",
+			}),
+		);
+		const result = toolResults(parts)[0]!;
+		// No bridge → no child session link; card stays non-navigable (as before).
+		expect(foldedMetadata(result)["sessionId"]).toBeUndefined();
+	});
+
+	it("skips linking when there is no parent sessionID", async () => {
+		const { client, calls } = stubClient();
+		setSubagentBridge({ client: client as never });
+		const parts = await collect(cursorEventsToStream(gen(taskEvents), "blocks"));
+		const result = toolResults(parts)[0]!;
+		expect(foldedMetadata(result)["sessionId"]).toBeUndefined();
+		expect(calls.create.length).toBe(0);
+	});
+
+	it("survives a client that throws (best-effort link)", async () => {
+		setSubagentBridge({
+			client: {
+				session: {
+					create: async () => {
+						throw new Error("boom");
+					},
+					prompt: async () => ({ data: {} }),
+				},
+			} as never,
+		});
+		const parts = await collect(
+			cursorEventsToStream(gen(taskEvents), "blocks", {
+				sessionID: "ses_parent",
+			}),
+		);
+		const result = toolResults(parts)[0]!;
+		expect(foldedMetadata(result)["sessionId"]).toBeUndefined();
 	});
 });

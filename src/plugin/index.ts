@@ -13,6 +13,10 @@ import {
 import { buildCursorTools } from "./cursor-tools.js";
 import { warnIfStale } from "../version-check.js";
 import { removeSystemRule } from "../provider/system-rule.js";
+import {
+	clearSubagentBridge,
+	setSubagentBridge,
+} from "../provider/subagent-bridge.js";
 
 function apiKeyFromAuth(auth: Auth | undefined): string | undefined {
 	return auth?.type === "api" ? auth.key : undefined;
@@ -49,6 +53,11 @@ export const CursorPlugin: Plugin = async (input) => {
 	// (reflecting mid-session enable/disable) rather than the startup snapshot.
 	const client = input?.client;
 	const directory = input?.directory;
+	// Publish the opencode client + directory so the provider stream layer can
+	// create a real child session for each Cursor subagent (making its `task`
+	// card clickable / `ctrl+x`-navigable). Same-process handoff via a globalThis
+	// registry; the provider degrades gracefully when it's absent.
+	if (client) setSubagentBridge({ client, directory });
 	// Canonical working directory for the generated system-prompt rule: the
 	// provider writes `.cursor/rules/opencode.mdc` under this path and dispose
 	// cleans it up from the same path. The config hook threads it into the
@@ -265,6 +274,7 @@ export const CursorPlugin: Plugin = async (input) => {
 			// Uses the same canonical cwd the provider wrote to; sentinel-guarded,
 			// so a user-owned opencode.mdc is never deleted.
 			removeSystemRule(resolvedCwd);
+			clearSubagentBridge();
 		},
 	};
 };

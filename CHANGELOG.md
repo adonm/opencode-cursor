@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0-next.0] — 2026-07-24
+
+Native Cursor subagents: the Cursor agent's `task` tool now renders as a
+navigable opencode child session instead of a dead "Unspecified Task" card.
+
+- **Cursor subagents are now navigable opencode child sessions.** When the Cursor
+  agent runs its `task` tool, the plugin creates a real opencode child session
+  (`parentID` = the current session) and links it to the task card, so it's
+  clickable and reachable via `ctrl+x down` — like a native subagent. The child
+  session is seeded with the subagent's prompt and Cursor's returned transcript
+  plus a real duration line (posted as user-role messages via `noReply`; the
+  public API can't synthesize assistant messages). Best-effort: if the opencode
+  client is unavailable the card degrades to its previous, non-navigable form.
+  The plugin hands its opencode client to the provider stream layer through an
+  in-process bridge (`src/provider/subagent-bridge.ts`).
+- **Fixed: generic Cursor subagents rendered as "Unspecified Task".** Cursor's
+  proto zero-value `subagentType.kind` (`"unspecified"`) is no longer forwarded
+  as the agent label; the card now falls back to opencode's "General Task" (or
+  the real subagent name when Cursor provides one).
+
 ## [0.5.0] — 2026-07-24
 
 Native-experience overhaul: in-process HTTP/1.1 transport under Bun, typed-error
