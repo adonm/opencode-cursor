@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.0-next.0] — 2026-07-24
+## [0.6.0] — 2026-07-24
 
 Native Cursor subagents: the Cursor agent's `task` tool now renders as a
 navigable opencode child session instead of a dead "Unspecified Task" card.
