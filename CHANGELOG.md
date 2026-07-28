@@ -4,10 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.6.2-next.0] — 2026-07-27 (pre-release)
+## [0.6.2] — 2026-07-28
 
-Pre-release of the version-check UX cleanup from #79. Not yet on `latest`; install with
-`npm install @stablekernel/opencode-cursor@next` to test.
+Version-check UX cleanup from #79.
 
 - **Fixed: startup toast no longer suspends into the user's first prompt on slow networks.**
   The version-check toast previously ran `setTimeout(callback, 2000)` and then `await
