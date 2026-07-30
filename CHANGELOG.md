@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0-next.0] — 2026-07-30 (pre-release)
+
+Pre-release of structured logging (#85), the stream-watchdog tool-phase budget (#86), and the
+session-pool title-generation race fix (#84). Not yet on `latest`; install with
+`npm install @stablekernel/opencode-cursor@next` to test.
+
 - **Structured logging via `client.app.log()` instead of raw `console.*`.** The
   plugin's own diagnostics (transport fallback warnings, per-turn debug traces
   gated on `OPENCODE_CURSOR_DEBUG=1`) now route through opencode's plugin
@@ -40,6 +46,17 @@ All notable changes to this project will be documented in this file.
   trap reachable by following the plugin's own advice. Setting it to e.g. `999999999999` stalled
   every tool-bearing turn within milliseconds while reporting `no events for 999999999999ms`. Both
   budgets are now capped at `2147483647`.
+- **Fixed: opencode's title-generation call could poison a session's pool entry.** opencode forks a
+  title-generation call on the same `sessionID` as the session's real first turn, concurrently and
+  with an empty system prompt. `classifyTurn`'s side-call detection only fires once a prior pool
+  record exists, so on turn 1 both calls classified as "new" and both wrote to the pool — whichever
+  agent-creation round-trip resolved last silently overwrote the other, leaving the session
+  fingerprinted against the title prompt. Two fixes: the plugin's `chat.params` hook now marks
+  opencode's `title` agent call as `providerOptions.cursor.ephemeral = true` (the provider already
+  honored this flag but nothing set it), and `withSessionLock` (a per-`sessionID` async lock) now
+  wraps `agentRun`'s classify-then-acquire span so concurrent turns for one session serialize and
+  the second call always observes the first's completed pool write.
+- **Dependency bumps:** `@cursor/sdk` 1.0.24 → 1.0.26, `@opencode-ai/plugin` (opencode-ai group).
 
 ## [0.6.2] — 2026-07-28
 
