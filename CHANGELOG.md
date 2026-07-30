@@ -4,11 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.7.0-next.0] — 2026-07-30 (pre-release)
+## [0.7.0] — 2026-07-30
 
-Pre-release of structured logging (#85), the stream-watchdog tool-phase budget (#86), and the
-session-pool title-generation race fix (#84). Not yet on `latest`; install with
-`npm install @stablekernel/opencode-cursor@next` to test.
+Structured logging (#85), the stream-watchdog tool-phase budget (#86), and the
+session-pool title-generation race fix (#84).
 
 - **Structured logging via `client.app.log()` instead of raw `console.*`.** The
   plugin's own diagnostics (transport fallback warnings, per-turn debug traces
