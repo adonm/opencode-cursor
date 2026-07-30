@@ -20,6 +20,26 @@ All notable changes to this project will be documented in this file.
   own interceptor forwarding over the existing JSONL protocol) and re-emitted
   as structured opencode logs instead of raw terminal noise. Every other
   `console.log` call passes through unchanged.
+- **Fixed: the stream watchdog killed healthy runs during long tool execution.** The watchdog
+  re-armed only on mapped event types, so a long shell command, build, or test suite that streamed
+  nothing for 60s was cancelled and the turn lost. It now uses two budgets — an idle budget
+  (`OPENCODE_CURSOR_STALL_MS`, default raised to `120000`) and a larger tool-phase budget
+  (`OPENCODE_CURSOR_TOOL_STALL_MS`, default `600000`) applied while a tool call is in flight — and
+  re-arms on **any** SDK update, including types the plugin doesn't model (progress/heartbeats). A
+  tool-phase stall is terminal and names the in-flight tool. `OPENCODE_CURSOR_STALL_MS=0` still
+  disables the whole watchdog; the tool-phase bound is independently disabled with
+  `OPENCODE_CURSOR_TOOL_STALL_MS=0`. Open tool calls are reconciled on `turn-ended` and on a forced
+  resend, so a dropped completion can't pin a turn to the 10-minute budget.
+- **Fixed: a non-numeric `OPENCODE_CURSOR_STALL_MS` stalled every turn immediately.**
+  `Number("abc")` is `NaN`; `NaN <= 0` is `false`, so the guard passed and `setTimeout(fn, NaN)`
+  fired at once. Env parsing now falls back to the default for non-finite values (an empty string
+  still disables, preserving the historical escape hatch).
+- **Fixed: an over-large stall budget overflowed to a ~1 ms deadline.** A `setTimeout` delay is
+  stored as a signed 32-bit int, so anything above `2147483647` is silently clamped to `1` — and the
+  tool-phase stall message tells operators to *raise* `OPENCODE_CURSOR_TOOL_STALL_MS`, making the
+  trap reachable by following the plugin's own advice. Setting it to e.g. `999999999999` stalled
+  every tool-bearing turn within milliseconds while reporting `no events for 999999999999ms`. Both
+  budgets are now capped at `2147483647`.
 
 ## [0.6.2] — 2026-07-28
 
