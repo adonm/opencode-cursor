@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- **Skills bridge: opencode skills are now mirrored into `.cursor/skills/` for
+  the Cursor agent.** Both project-scoped and global skills are discovered
+  (matching opencode's resolution order: `.opencode/skills/`, `.claude/skills/`,
+  `.agents/skills/`, walked up to the git worktree root, plus global
+  `~/.config/opencode/skills/` etc.), filtered through opencode's `permission`
+  config, and materialised as a git-ignored mirror with a `generated:
+  opencode-cursor` sentinel. An `<available_skills>` catalogue is appended to
+  the generated system rule so the Cursor agent can discover and load skills on
+  demand. Works for the primary agent, Cursor sub-agents, and `cursor_delegate`
+  (which passes `settingSources: ["project"]`). `ask`-permissioned skills are
+  withheld (the ask prompt can't cross the Cursor boundary). Opt out with
+  `forwardSkills: false`; manual override with `skills: { include, exclude }`.
+  User-owned `.cursor/skills/<id>/` directories are never overwritten.
+  `config.skills.paths` directories are also scanned (lowest priority,
+  first-wins on duplicate ids). Symlinked skill directories and symlinked
+  supporting files are followed (broken links and symlink loops are skipped).
+  Mirror diagnostics (withheld skills, oversized files, write failures) route
+  through opencode's structured plugin logging rather than the terminal,
+  matching 0.7.0's logging change. `config.skills.urls` (HTTP catalogs) and
+  skills bundled inside opencode plugin packages are not yet supported.
+
 ## [0.7.0] — 2026-07-30
 
 Structured logging (#85), the stream-watchdog tool-phase budget (#86), and the

@@ -186,6 +186,11 @@ export function buildCursorTools(deps: CursorToolDeps): Record<string, ToolDefin
             prompt: args.prompt,
             model: args.model,
             cwd: args.additionalCwds?.length ? [baseCwd, ...args.additionalCwds] : baseCwd,
+            // Honour the user's project settings layer so delegated turns pick
+            // up `.cursor/skills/` from the delegate's cwd. The delegate defaults
+            // to ["project"] on its own, so this is only needed when the user
+            // explicitly configured settingSources on the provider.
+            settingSources: ["project"],
             ...(args.mode ? { mode: args.mode } : {}),
             ...(args.thinking ? { thinking: args.thinking } : {}),
             ...(args.sandbox !== undefined ? { sandbox: args.sandbox } : {}),
