@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1-next.0] — 2026-08-03 (pre-release)
+
+Pre-release of the skills bridge (#90) and per-model context limits + pricing
+(#89). Not yet on `latest`; install with
+`npm install @stablekernel/opencode-cursor@next` to test.
+
 - **Skills bridge: opencode skills are now mirrored into `.cursor/skills/` for
   the Cursor agent.** Both project-scoped and global skills are discovered
   (matching opencode's resolution order: `.opencode/skills/`, `.claude/skills/`,
@@ -24,6 +30,17 @@ All notable changes to this project will be documented in this file.
   through opencode's structured plugin logging rather than the terminal,
   matching 0.7.0's logging change. `config.skills.urls` (HTTP catalogs) and
   skills bundled inside opencode plugin packages are not yet supported.
+- **Per-model context limits and pricing generated from Cursor's docs.** The
+  plugin now ships a generated `src/model-limits.ts` (regenerated on schedule via
+  `scripts/sync-model-limits.mjs`, with a CI drift check that fails the job if
+  the committed data falls behind Cursor's published tables). Each resolved
+  model carries a context-window limit and per-token pricing, emitted on the
+  config channel opencode reads so the TUI can show cost and token counts.
+  High-output frontier models carry a separate output-token limit. A
+  `models` generator CLI (`scripts/sync-model-limits-cli.mjs`) is import-pure
+  and calls `main()` unconditionally; the drift check captures stdout and
+  requires the run summary line, so "exited 0 having done nothing" fails
+  instead of passing for free.
 
 ## [0.7.0] — 2026-07-30
 
