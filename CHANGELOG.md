@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1-next.1] — 2026-08-03 (pre-release)
+
+Pre-release of the compaction fix (#91). Not yet on `latest`; install with
+`npm install @stablekernel/opencode-cursor@next` to test.
+
 - **Fixed: auto-compaction (and manual `/compact`) failed with `Tool call not
   allowed while generating summary` whenever the Cursor agent used a tool while
   summarizing.** opencode declares zero tools on a compaction/summary turn, but
