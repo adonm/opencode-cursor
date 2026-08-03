@@ -1,6 +1,7 @@
 import type { Model as ModelV2 } from "@opencode-ai/sdk/v2";
 import type { ModelListItem } from "@cursor/sdk";
 import { modelSupportsReasoning } from "../model-discovery.js";
+import { resolveContextLimit, resolveCost, resolveOutputLimit } from "../model-limits.js";
 import { buildModelVariants, defaultModelParams } from "../model-variants.js";
 
 export const PROVIDER_ID = "cursor";
@@ -19,9 +20,9 @@ export function providerNpm(): string {
 
 /**
  * Build opencode's rich runtime `Model` objects from discovered Cursor models.
- * Used by the auth-aware `provider.models()` hook. Fields opencode does not get
- * from the Cursor catalog are filled with safe defaults (zero cost — Cursor
- * bills separately; generous context limits).
+ * Used by the auth-aware `provider.models()` hook. Cost and context/output
+ * limits are resolved per model from the shared maps in `../model-limits.js`,
+ * falling back to $0 / 200K context / 32K output for models absent from them.
  */
 export function buildModelV2Map(items: ModelListItem[]): Record<string, ModelV2> {
   const out: Record<string, ModelV2> = {};
@@ -41,8 +42,11 @@ export function buildModelV2Map(items: ModelListItem[]): Record<string, ModelV2>
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
       },
-      cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-      limit: { context: 200_000, output: 32_000 },
+      cost: (() => {
+        const c = resolveCost(item.id);
+        return { input: c.input, output: c.output, cache: { read: c.cacheRead, write: c.cacheWrite } };
+      })(),
+      limit: { context: resolveContextLimit(item.id), output: resolveOutputLimit(item.id) },
       status: "active",
       options: Object.keys(params).length > 0 ? { params } : {},
       headers: {},
