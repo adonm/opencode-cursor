@@ -30,17 +30,17 @@ Pre-release of the skills bridge (#90) and per-model context limits + pricing
   through opencode's structured plugin logging rather than the terminal,
   matching 0.7.0's logging change. `config.skills.urls` (HTTP catalogs) and
   skills bundled inside opencode plugin packages are not yet supported.
-- **Per-model context limits and pricing generated from Cursor's docs.** The
-  plugin now ships a generated `src/model-limits.ts` (regenerated on schedule via
-  `scripts/sync-model-limits.mjs`, with a CI drift check that fails the job if
-  the committed data falls behind Cursor's published tables). Each resolved
-  model carries a context-window limit and per-token pricing, emitted on the
-  config channel opencode reads so the TUI can show cost and token counts.
-  High-output frontier models carry a separate output-token limit. A
-  `models` generator CLI (`scripts/sync-model-limits-cli.mjs`) is import-pure
-  and calls `main()` unconditionally; the drift check captures stdout and
-  requires the run summary line, so "exited 0 having done nothing" fails
-  instead of passing for free.
+  Skills bridge contributed by Wayne Simpson (@WayneSimpson).
+- **Per-model context limits and pricing generated from Cursor's docs.** Each
+  resolved model now carries a context-window limit and per-token pricing,
+  emitted on the config channel opencode reads so the TUI can show cost and
+  token counts. High-output frontier models carry a separate output-token
+  limit. The data ships as a generated `src/model-limits.ts`, produced from
+  Cursor's published tables by `npm run sync:model-limits`; a weekly CI job
+  re-checks the committed data against those tables and fails if it has fallen
+  behind (it verifies only — regenerating is a manual step).
+- **Dependency bumps:** `@ai-sdk/provider` 3.0.13 → 3.0.14, `@types/node`
+  26.0.0 → 26.1.2, `vitest` 4.1.9 → 4.1.10 (dev-dependencies group, #88).
 
 ## [0.7.0] — 2026-07-30
 
