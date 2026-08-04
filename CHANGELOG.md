@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.1-next.2] — 2026-08-04 (pre-release)
+
+Pre-release of the auto-compaction suppression (#92). Not yet on `latest`; install with
+`npm install @stablekernel/opencode-cursor@next` to test.
+
 - **opencode's threshold-triggered auto-compaction is now suppressed for Cursor models by
   default.** The Cursor agent runtime already self-compacts on its own context threshold
   (`preCompact` hook with `trigger: "auto"`), so opencode-driven compaction was redundant —
