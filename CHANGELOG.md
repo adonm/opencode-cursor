@@ -4,57 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.7.1-next.2] — 2026-08-04 (pre-release)
+## [0.7.1] — 2026-08-05
 
-Pre-release of the auto-compaction suppression (#92). Not yet on `latest`; install with
-`npm install @stablekernel/opencode-cursor@next` to test.
-
-- **opencode's threshold-triggered auto-compaction is now suppressed for Cursor models by
-  default.** The Cursor agent runtime already self-compacts on its own context threshold
-  (`preCompact` hook with `trigger: "auto"`), so opencode-driven compaction was redundant —
-  and it caused two real failures. First, the compaction turn runs with zero tools declared
-  while the Cursor agent uses its own tools anyway, which opencode rejects (`Tool call not
-  allowed while generating summary`) — mitigated in 0.7.1-next.1 (#91), and now avoided
-  entirely for the automatic trigger. Second, compaction rewrites the transcript, which
-  classifies as a divergence and mints a **fresh Cursor agentId** — and every distinct
-  agentId permanently holds a guarded SQLite `store.db`/`-wal`/`-shm` triple that
-  `agent.close()` cannot release (it only flushes analytics and releases the executor lease).
-  That descriptor growth fed an uncatchable `EXC_GUARD` process kill.
-
-  Suppression uses a large `limit.input` — the value opencode uses as its compaction
-  threshold — leaving the real `limit.context` intact so the TUI context gauge and cost
-  reporting still work. Manual `/compact` is unaffected and still relies on #91's fix.
-
-  **Tradeoff:** this suppresses the proactive threshold trigger only, and opencode has no
-  reactive context-overflow recovery wired up for this provider, so its transcript is no
-  longer trimmed automatically. Ordinary turns send only the new message, but a cold replay
-  (new session, expired agent, changed MCP set) resends everything; if that overflows the
-  model the turn fails and `/compact` is the manual recovery. Opt back out with
-  `provider.cursor.options.autoCompaction: true`.
-
-## [0.7.1-next.1] — 2026-08-03 (pre-release)
-
-Pre-release of the compaction fix (#91). Not yet on `latest`; install with
-`npm install @stablekernel/opencode-cursor@next` to test.
-
-- **Fixed: auto-compaction (and manual `/compact`) failed with `Tool call not
-  allowed while generating summary` whenever the Cursor agent used a tool while
-  summarizing.** opencode declares zero tools on a compaction/summary turn, but
-  the Cursor agent runs its own tools regardless; the provider forwarded that
-  activity as provider-executed `tool-call` parts, which opencode's summary
-  guard rejects. The provider now routes no-tools turns through the existing
-  `"reasoning"` tool-display path, so Cursor's tool activity surfaces as
-  reasoning text instead of crossing the tool-execution boundary. Manual
-  `/compact` was affected all along; **auto**-compaction became reachable only
-  in 0.7.1-next.0, because #89 published real per-model context windows —
-  pre-0.7.1 opencode saw `limit.context: 0` for every Cursor model, and a zero
-  context limit structurally disables the auto-compaction trigger.
-
-## [0.7.1-next.0] — 2026-08-03 (pre-release)
-
-Pre-release of the skills bridge (#90) and per-model context limits + pricing
-(#89). Not yet on `latest`; install with
-`npm install @stablekernel/opencode-cursor@next` to test.
+The skills bridge (#90), per-model context limits and pricing (#89), and the
+compaction fixes (#91, #92).
 
 - **Skills bridge: opencode skills are now mirrored into `.cursor/skills/` for
   the Cursor agent.** Both project-scoped and global skills are discovered
@@ -87,6 +40,40 @@ Pre-release of the skills bridge (#90) and per-model context limits + pricing
   behind (it verifies only — regenerating is a manual step).
 - **Dependency bumps:** `@ai-sdk/provider` 3.0.13 → 3.0.14, `@types/node`
   26.0.0 → 26.1.2, `vitest` 4.1.9 → 4.1.10 (dev-dependencies group, #88).
+- **opencode's threshold-triggered auto-compaction is now suppressed for Cursor models by
+  default.** The Cursor agent runtime already self-compacts on its own context threshold
+  (`preCompact` hook with `trigger: "auto"`), so opencode-driven compaction was redundant —
+  and it caused two real failures. First, the compaction turn runs with zero tools declared
+  while the Cursor agent uses its own tools anyway, which opencode rejects (`Tool call not
+  allowed while generating summary`) — mitigated in 0.7.1-next.1 (#91), and now avoided
+  entirely for the automatic trigger. Second, compaction rewrites the transcript, which
+  classifies as a divergence and mints a **fresh Cursor agentId** — and every distinct
+  agentId permanently holds a guarded SQLite `store.db`/`-wal`/`-shm` triple that
+  `agent.close()` cannot release (it only flushes analytics and releases the executor lease).
+  That descriptor growth fed an uncatchable `EXC_GUARD` process kill.
+
+  Suppression uses a large `limit.input` — the value opencode uses as its compaction
+  threshold — leaving the real `limit.context` intact so the TUI context gauge and cost
+  reporting still work. Manual `/compact` is unaffected and still relies on #91's fix.
+
+  **Tradeoff:** this suppresses the proactive threshold trigger only, and opencode has no
+  reactive context-overflow recovery wired up for this provider, so its transcript is no
+  longer trimmed automatically. Ordinary turns send only the new message, but a cold replay
+  (new session, expired agent, changed MCP set) resends everything; if that overflows the
+  model the turn fails and `/compact` is the manual recovery. Opt back out with
+  `provider.cursor.options.autoCompaction: true`.
+- **Fixed: auto-compaction (and manual `/compact`) failed with `Tool call not
+  allowed while generating summary` whenever the Cursor agent used a tool while
+  summarizing.** opencode declares zero tools on a compaction/summary turn, but
+  the Cursor agent runs its own tools regardless; the provider forwarded that
+  activity as provider-executed `tool-call` parts, which opencode's summary
+  guard rejects. The provider now routes no-tools turns through the existing
+  `"reasoning"` tool-display path, so Cursor's tool activity surfaces as
+  reasoning text instead of crossing the tool-execution boundary. Manual
+  `/compact` was affected all along; **auto**-compaction became reachable only
+  in 0.7.1-next.0, because #89 published real per-model context windows —
+  pre-0.7.1 opencode saw `limit.context: 0` for every Cursor model, and a zero
+  context limit structurally disables the auto-compaction trigger.
 
 ## [0.7.0] — 2026-07-30
 
