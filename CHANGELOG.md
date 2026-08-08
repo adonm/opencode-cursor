@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
   oy's OpenCode V2 integration and removing the legacy plugin export.
 - Pinned `@cursor/sdk` 1.0.27 so the provider and oy execute against the same
   tested SDK build.
+- Declared `undici` 6.28.0 directly so downstream installs cannot lose the
+  patched transport version when npm ignores nested package overrides.
 - Added one bounded fresh-agent replay when a fresh or resumed run fails before
   emitting output.
 - Added terminal-status diagnostics with Cursor result details and SDK update
