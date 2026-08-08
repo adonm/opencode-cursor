@@ -33,6 +33,11 @@ npm install @oy-cli/opencode-cursor
 
 Most users should install only `@oy-cli/opencode`.
 
+`@cursor/sdk` currently resolves an older nested `undici` through Connect.
+Because npm does not apply overrides declared by dependencies, applications
+embedding this provider directly must enforce `undici` 6.28.0 from their root.
+`@oy-cli/opencode` already does so.
+
 ## Reliability behavior
 
 - A 120-second idle watchdog detects streams that stop producing SDK updates.
