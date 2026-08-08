@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-08-09
+
+- Forked the provider runtime as `@oy-cli/opencode-cursor`, supporting only
+  oy's OpenCode V2 integration and removing the legacy plugin export.
+- Pinned `@cursor/sdk` 1.0.27 so the provider and oy execute against the same
+  tested SDK build.
+- Added one bounded fresh-agent replay when a fresh or resumed run fails before
+  emitting output.
+- Added terminal-status diagnostics with Cursor result details and SDK update
+  counts.
+- Routed silent interjection turns through the same watchdog-protected stream
+  path as visible turns.
+- Failed agents are now closed and removed from the persistent session pool.
+
 ## [0.7.1] — 2026-08-05
 
 The skills bridge (#90), per-model context limits and pricing (#89), and the

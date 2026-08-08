@@ -83,6 +83,17 @@ describe("SidecarClient", () => {
     );
   });
 
+  it("preserves SDK terminal error details across the process boundary", async () => {
+    const client = makeClient();
+    const agent = await client.createAgent(CREATE_OPTIONS);
+    const run = await agent.send({ type: "user", text: "terminal" }, { mode: "agent" });
+
+    await expect(run.wait()).resolves.toMatchObject({
+      status: "error",
+      error: { message: "stream transport closed", code: "stream_closed" },
+    });
+  });
+
   it("multiplexes concurrent sends over one child", async () => {
     const client = makeClient();
     const [a, b] = await Promise.all([

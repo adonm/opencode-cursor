@@ -66,6 +66,18 @@ describe("acquireAgent", () => {
 		expect(r.agent.close).not.toHaveBeenCalled(); // pooled agents persist
 	});
 
+	it("discards a failed pooled agent and removes its persisted record", async () => {
+		create.mockResolvedValue(fakeAgent("a1"));
+		const r = await acquireAgent({ ...base, poolKey: "s1", record: rec });
+
+		r.discard();
+
+		expect(r.agent.close).toHaveBeenCalled();
+		expect(getSessionRecord("s1")).toBeUndefined();
+		resetSessionPoolMemory();
+		expect(getSessionRecord("s1")).toBeUndefined();
+	});
+
 	it("resumes the given resumeAgentId", async () => {
 		resume.mockResolvedValue(fakeAgent("a1"));
 		const r = await acquireAgent({

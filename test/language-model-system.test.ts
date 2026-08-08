@@ -52,6 +52,7 @@ beforeEach(() => {
 		agent: {},
 		resumed: false,
 		release: () => {},
+		discard: () => {},
 	}));
 	streamAgentTurn.mockImplementation(() => (async function* () {})());
 });

@@ -26,6 +26,7 @@ import { classifyError } from "./error-classify.js";
 import { pluginLog } from "./log-bridge.js";
 import {
 	addUsage,
+	CursorRunError,
 	sendAgentTurnSilently,
 	streamAgentTurn,
 	type CursorEvent,
@@ -428,7 +429,11 @@ export class CursorLanguageModel implements LanguageModelV3 {
 						delivered = true;
 					}
 				} finally {
-					if (!delivered && sessionID) dropSessionRecord(sessionID);
+					if (!delivered) {
+						if (sessionID) dropSessionRecord(sessionID);
+						acquired.discard();
+						releasedOriginal = true;
+					}
 				}
 			} else {
 				// A resumed agent already remembers the prior conversation, so send
@@ -446,6 +451,10 @@ export class CursorLanguageModel implements LanguageModelV3 {
 						yielded = true;
 						yield event;
 					}
+					if (options.abortSignal?.aborted) {
+						acquired.discard();
+						releasedOriginal = true;
+					}
 				} catch (err) {
 					const classified = classifyError(err);
 					// Auth/config: never a blind retry — replaying the transcript can't
@@ -459,22 +468,15 @@ export class CursorLanguageModel implements LanguageModelV3 {
 								)
 							: err;
 					}
-					// Resume-aware replay: a resumed agent can pass resume() yet fail the
-					// actual send when Cursor's server has already expired the agent (its
-					// server-side retention is shorter than our local 7-day reuse window,
-					// and not documented), or the send can die retryably before anything
-					// emitted. If nothing has been emitted downstream yet and the user
-					// hasn't aborted, transparently re-create a fresh agent and replay the
-					// full transcript — self-healing, no context loss. The fresh agent
-					// re-pools under the same session (overwriting the dead agentId) via
-					// acquireAgent's existing pooling path.
+					// Transport-agnostic replay: a resumed OR freshly-created agent can
+					// end with an empty terminal error when Cursor's transport is dead.
+					// If nothing has been emitted downstream and the user hasn't aborted,
+					// transparently create one fresh agent and replay the full transcript.
+					// The shared idempotency key bounds duplicate delivery, and a pooled
+					// replacement overwrites the failed agent id.
 					//
-					// Gated on a classified, replayable set — agent-not-found (expired
-					// resume), rate-limit, network, and unknown. auth/config fail fast
-					// above; agent-busy is recovered at the send layer (sendWithRecovery),
-					// so it never reaches here as a replay trigger. Bounded to a single
-					// attempt, and the turn's idempotencyKey makes resends server-side
-					// dedupes, so the worst case is one extra create.
+					// Gated on a classified, replayable set and bounded to one attempt.
+					// Auth/config fail fast above; agent-busy is recovered at send time.
 					const replayable =
 						classified.kind === "agent-not-found" ||
 						classified.kind === "rate-limit" ||
@@ -482,17 +484,16 @@ export class CursorLanguageModel implements LanguageModelV3 {
 						classified.kind === "unknown";
 					if (
 						replayable &&
-						acquired.resumed &&
 						!yielded &&
 						!options.abortSignal?.aborted
 					) {
 						if (process.env["OPENCODE_CURSOR_DEBUG"] === "1") {
 							pluginLog(
 								"debug",
-								"resumed turn failed before emitting; retrying with a fresh agent",
+								`${acquired.resumed ? "resumed" : "fresh"} turn failed before emitting; retrying with a fresh agent`,
 							);
 						}
-						acquired.release();
+						acquired.discard();
 						releasedOriginal = true;
 						// A fresh create (no resumeAgentId) re-pools under the same
 						// session, overwriting the dead agentId. If re-acquiring itself
@@ -517,17 +518,24 @@ export class CursorLanguageModel implements LanguageModelV3 {
 							}
 							throw retryErr;
 						}
+						const replay = promptToCursorMessage(options.prompt, systemMode);
+						let delivered = false;
 						try {
-							const replay = promptToCursorMessage(options.prompt, systemMode);
 							yield* streamAgentTurn(retry.agent, replay, {
 								mode,
 								abortSignal: options.abortSignal,
 								idempotencyKey,
 							});
+							delivered = !options.abortSignal?.aborted;
 						} finally {
-							retry.release();
+							if (delivered) retry.release();
+							else retry.discard();
 						}
 					} else {
+						if (err instanceof CursorRunError) {
+							acquired.discard();
+							releasedOriginal = true;
+						}
 						throw err;
 					}
 				}

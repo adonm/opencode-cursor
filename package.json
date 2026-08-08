@@ -1,24 +1,24 @@
 {
-  "name": "@stablekernel/opencode-cursor",
-  "version": "0.7.1",
-  "description": "opencode provider plugin backed by the official Cursor SDK (@cursor/sdk) — adds a Cursor provider and lists its models",
+  "name": "@oy-cli/opencode-cursor",
+  "version": "0.1.0",
+  "description": "Cursor SDK provider runtime focused on the OpenCode V2 integration in @oy-cli/opencode",
   "type": "module",
   "license": "MIT",
   "author": "justin-carper (https://github.com/justin-carper)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stablekernel/opencode-cursor.git"
+    "url": "https://github.com/adonm/opencode-cursor.git"
   },
-  "homepage": "https://github.com/stablekernel/opencode-cursor#readme",
+  "homepage": "https://github.com/adonm/opencode-cursor#readme",
   "bugs": {
-    "url": "https://github.com/stablekernel/opencode-cursor/issues"
+    "url": "https://github.com/adonm/opencode-cursor/issues"
   },
   "engines": {
     "node": ">=22.13.0"
   },
   "keywords": [
     "opencode",
-    "opencode-plugin",
+    "opencode-v2",
     "cursor",
     "cursor-sdk",
     "ai-sdk",
@@ -36,18 +36,11 @@
     ".": {
       "types": "./dist/provider/index.d.ts",
       "import": "./dist/provider/index.js"
-    },
-    "./server": {
-      "types": "./dist/plugin/index.d.ts",
-      "import": "./dist/plugin/index.js"
-    },
-    "./plugin": {
-      "types": "./dist/plugin/index.d.ts",
-      "import": "./dist/plugin/index.js"
     }
   },
   "scripts": {
     "build": "tsup",
+    "prepare": "npm run build",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -57,15 +50,13 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "@connectrpc/connect-node": "^2.1.2",
-    "@cursor/sdk": "^1.0.24",
-    "@opencode-ai/plugin": "^1.18.4",
-    "semver": "^7.8.4"
+    "@cursor/sdk": "1.0.27"
   },
   "overrides": {
-    "undici": "^6.24.0",
+    "undici": "6.28.0",
     "tar": "^7.5.11",
     "node-gyp": "^12.4.0",
+    "nanoid": "3.3.17",
     "esbuild": "^0.28.1"
   },
   "peerDependencies": {
@@ -73,9 +64,11 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.13",
+    "@opencode-ai/plugin": "^1.18.4",
     "@opencode-ai/sdk": "^1.18.4",
     "@types/node": "^26.0.0",
     "@types/semver": "^7.7.1",
+    "semver": "^7.8.4",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

@@ -1,5 +1,10 @@
 import type { AgentModeOption, SDKUserMessage } from "@cursor/sdk";
-import type { AgentLike, AgentRunLike, AgentSendOptions } from "./agent-backend.js";
+import type {
+  AgentLike,
+  AgentRunLike,
+  AgentRunResultLike,
+  AgentSendOptions,
+} from "./agent-backend.js";
 import { classifyError } from "./error-classify.js";
 import { pluginLog } from "./log-bridge.js";
 
@@ -34,6 +39,41 @@ export interface StreamAgentTurnOptions {
    * reported usage includes everything spent replaying earlier messages.
    */
   usageBase?: CursorUsage;
+}
+
+/** Terminal Cursor run failure with safe stream diagnostics attached. */
+export class CursorRunError extends Error {
+  readonly status: string;
+  readonly result?: string;
+  readonly code?: string;
+  readonly terminalError?: Readonly<{ message: string; code?: string }>;
+  readonly updates: Readonly<Record<string, number>>;
+
+  constructor(result: AgentRunResultLike, updates: Record<string, number>) {
+    const details: string[] = [];
+    const resultDetail = result.result?.trim();
+    if (resultDetail) details.push(resultDetail);
+    if (result.error?.message && result.error.message !== resultDetail) {
+      details.push(
+        `error: ${result.error.message}${result.error.code ? ` [${result.error.code}]` : ""}`,
+      );
+    }
+    const updateSummary = Object.entries(updates)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([type, count]) => `${type}=${count}`)
+      .join(", ");
+    super(
+      `Cursor run ended with status "${result.status}"` +
+        (details.length > 0 ? `: ${details.join("; ")}` : " with no result or error detail") +
+        ` (${updateSummary ? `SDK updates: ${updateSummary}` : "no SDK updates received"})`,
+    );
+    this.name = "CursorRunError";
+    this.status = result.status;
+    this.result = result.result;
+    this.code = result.error?.code;
+    this.terminalError = result.error ? Object.freeze({ ...result.error }) : undefined;
+    this.updates = Object.freeze({ ...updates });
+  }
 }
 
 /** Sum two usage reports (either may be absent). */
@@ -152,7 +192,7 @@ export async function* streamAgentTurn(
   };
 
   const onDelta = ({ update }: { update: { type: string } & Record<string, any> }) => {
-    if (debug) counts[update.type] = (counts[update.type] ?? 0) + 1;
+    counts[update.type] = (counts[update.type] ?? 0) + 1;
     switch (update.type) {
       case "text-delta":
         push({ type: "text-delta", text: update.text });
@@ -262,18 +302,20 @@ export async function* streamAgentTurn(
             updates: counts,
             status: result.status,
             resultLen: (result.result ?? "").length,
+            terminalError: result.error ?? null,
           });
         }
         // Superseded by a watchdog force-resend: this run is abandoned.
         if (gen !== runGen || finished) return;
-        if (result.status === "error") {
-          // Surface the failure instead of finishing silently — a silent stop
-          // leaves opencode showing dangling tool calls with no explanation.
-          throw new Error(
-            `Cursor run ended with status "error"${result.result ? `: ${result.result}` : ""}`,
-          );
+        if (result.status !== "finished") {
+          // A cancellation initiated by the host is expected. Every other
+          // non-finished status means the turn was not delivered and must be
+          // surfaced with enough transport evidence to diagnose it.
+          if (result.status !== "cancelled" || !options.abortSignal?.aborted) {
+            throw new CursorRunError(result, counts);
+          }
         }
-        // A cancelled run finishes without fabricating final text.
+        // A host-cancelled run finishes without fabricating final text.
         push({ type: "finish", ...(result.status === "cancelled" ? {} : { text: result.result }) });
       })
       .catch((err) => {
@@ -448,45 +490,13 @@ export async function sendAgentTurnSilently(
   message: SDKUserMessage,
   options: StreamAgentTurnOptions,
 ): Promise<CursorUsage | undefined> {
-  // Already aborted: don't start a turn just to cancel it.
   if (options.abortSignal?.aborted) return undefined;
-  const debug = process.env.OPENCODE_CURSOR_DEBUG === "1";
-  const runHolder: { run?: AgentRunLike } = {};
-  // Capture only the turn-ended usage; a silent turn streams nothing else.
+  // Drain through the same stream path as visible turns so silent interjection
+  // replay gets identical watchdog, cancellation, retry, and terminal-status
+  // handling. Only usage escapes; all user-visible events remain suppressed.
   let usage: CursorUsage | undefined;
-  const onDelta = ({ update }: { update: { type: string } & Record<string, any> }) => {
-    if (update.type === "turn-ended" && update.usage) usage = update.usage as CursorUsage;
-  };
-  const onAbort = () => {
-    void Promise.resolve(runHolder.run?.cancel()).catch(() => {});
-  };
-  options.abortSignal?.addEventListener("abort", onAbort);
-  try {
-    const run = await sendWithRecovery(
-      agent,
-      message,
-      { mode: options.mode, onDelta, ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}) },
-      debug,
-    );
-    runHolder.run = run;
-    // The signal may have fired while send() was in flight (before runHolder
-    // was populated, so onAbort had nothing to cancel); cancel now.
-    if (options.abortSignal?.aborted) void Promise.resolve(run.cancel()).catch(() => {});
-    const result = await run.wait();
-    if (result.status !== "finished") {
-      // Our own abort cancelled the run mid-flight: expected, not a failure.
-      // The caller's abort check stops the multi-send sequence and drops the
-      // session record, so this partial turn is never counted as delivered.
-      if (options.abortSignal?.aborted) return undefined;
-      // Anything else ("error", an external "cancelled", unknown states) means
-      // the message was NOT delivered; treating it as success would leave the
-      // session record claiming the agent saw a message it never received.
-      throw new Error(
-        `Cursor run ended with status "${result.status}"${result.result ? `: ${result.result}` : ""}`,
-      );
-    }
-    return usage;
-  } finally {
-    options.abortSignal?.removeEventListener("abort", onAbort);
+  for await (const event of streamAgentTurn(agent, message, options)) {
+    if (event.type === "usage") usage = event.usage;
   }
+  return usage;
 }

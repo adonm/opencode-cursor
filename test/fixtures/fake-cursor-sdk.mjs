@@ -6,6 +6,7 @@
  * Message-text driven behaviors:
  *   "busy"  -> send() rejects with AgentBusyError unless local.force is set
  *   "rich"  -> send() rejects with an error carrying status/code/isRetryable/helpUrl
+ *   "terminal" -> wait() returns SDK 1.0.27 structured terminal error details
  *   "hang"  -> run.wait() never resolves (until cancel(), which resolves cancelled)
  *   other   -> emits one text-delta "echo:<text>" update, wait() -> done:<text>
  *
@@ -44,6 +45,15 @@ function makeAgent(agentId, options) {
         err.isRetryable = true;
         err.helpUrl = "https://example.com/rate-limits";
         throw err;
+      }
+      if (text === "terminal") {
+        return {
+          wait: async () => ({
+            status: "error",
+            error: { message: "stream transport closed", code: "stream_closed" },
+          }),
+          cancel: () => {},
+        };
       }
       sendOptions?.onDelta?.({ update: { type: "text-delta", text: `echo:${text}` } });
       if (text === "hang") {

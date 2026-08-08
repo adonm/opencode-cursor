@@ -19,6 +19,7 @@ type OnDelta = (input: {
 interface FakeRunResult {
 	status: string;
 	result?: string;
+	error?: { message: string; code?: string };
 }
 
 /** Build a fake agent (the {@link AgentLike} contract `streamAgentTurn`
@@ -67,18 +68,51 @@ describe("streamAgentTurn run terminal status", () => {
 		const agent = fakeAgent({ result: { status: "error", result: "boom" } });
 		await expect(
 			collect(streamAgentTurn(agent, MESSAGE, { mode: "agent" })),
-		).rejects.toThrow(/error/i);
+		).rejects.toThrow(
+			'Cursor run ended with status "error": boom (no SDK updates received)',
+		);
 	});
 
-	it("completes without throwing when the run is cancelled", async () => {
+	it("throws when the run is cancelled externally", async () => {
 		const agent = fakeAgent({ result: { status: "cancelled" } });
-		const events = await collect(
-			streamAgentTurn(agent, MESSAGE, { mode: "agent" }),
+		await expect(
+			collect(streamAgentTurn(agent, MESSAGE, { mode: "agent" })),
+		).rejects.toThrow('status "cancelled"');
+	});
+
+	it("includes SDK update counts in terminal errors", async () => {
+		const agent = fakeAgent({
+			updates: [
+				{ type: "text-delta", text: "partial" },
+				{ type: "some-future-update" },
+			],
+			result: { status: "error" },
+		});
+		await expect(
+			collect(streamAgentTurn(agent, MESSAGE, { mode: "agent" })),
+		).rejects.toThrow(
+			/SDK updates: some-future-update=1, text-delta=1/,
 		);
-		// No finish text is fabricated for a cancelled run.
-		const finish = events.find((e) => e.type === "finish");
-		expect(finish).toBeDefined();
-		expect((finish as { text?: string }).text).toBeUndefined();
+	});
+
+	it("surfaces Cursor SDK 1.0.27 terminal error details", async () => {
+		const agent = fakeAgent({
+			result: {
+				status: "error",
+				error: {
+					message: "stream transport closed",
+					code: "stream_closed",
+				},
+			},
+		});
+		await expect(
+			collect(streamAgentTurn(agent, MESSAGE, { mode: "agent" })),
+		).rejects.toMatchObject({
+			name: "CursorRunError",
+			code: "stream_closed",
+			message:
+				'Cursor run ended with status "error": error: stream transport closed [stream_closed] (no SDK updates received)',
+		});
 	});
 });
 

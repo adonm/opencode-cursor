@@ -22,7 +22,12 @@ import { installCursorLogInterceptor } from "./cursor-log-intercept.js";
 import { pluginLog } from "./log-bridge.js";
 import { SidecarClient, type AgentLike } from "./sidecar-client.js";
 
-export type { AgentLike, AgentRunLike, AgentSendOptions } from "./sidecar-client.js";
+export type {
+  AgentLike,
+  AgentRunLike,
+  AgentRunResultLike,
+  AgentSendOptions,
+} from "./sidecar-client.js";
 
 export type TransportKind = "http1" | "http2-direct" | "sidecar";
 export type BackendKind = "in-process" | "sidecar";

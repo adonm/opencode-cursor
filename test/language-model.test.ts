@@ -35,7 +35,11 @@ interface FakeAgentOpts {
 	/** Updates to emit via onDelta before the run resolves. */
 	updates?: Array<Record<string, unknown> & { type: string }>;
 	/** Final run status + result. */
-	result?: { status: string; result?: string };
+	result?: {
+		status: string;
+		result?: string;
+		error?: { message: string; code?: string };
+	};
 	/** Captures the message passed to send() for assertions. */
 	sentMessages?: SDKUserMessage[];
 	/** When set, send() rejects with this error (named class → classifyError). */
@@ -203,11 +207,19 @@ describe("CursorLanguageModel doStream — resume-aware retry", () => {
 		expect(resume).toHaveBeenCalledOnce();
 	});
 
-	it("does not retry a fresh-create turn that errors (resumed === false)", async () => {
+	it("replays a fresh-create turn once when it terminally errors before emitting", async () => {
 		const model = makeModel();
+		const failed = fakeAgent({
+			agentId: "a1",
+			result: {
+				status: "error",
+				error: { message: "transport closed", code: "stream_closed" },
+			},
+		}) as unknown as { close: ReturnType<typeof vi.fn> };
 		create.mockResolvedValueOnce(
-			fakeAgent({ agentId: "a1", result: { status: "error", result: "boom" } }),
+			failed,
 		);
+		create.mockResolvedValueOnce(fakeAgent({ agentId: "a2" }));
 
 		const parts = await collectStream(
 			streamCall(model, {
@@ -216,9 +228,12 @@ describe("CursorLanguageModel doStream — resume-aware retry", () => {
 			} as never),
 		);
 
-		expect(eventTypes(parts)).toContain("error");
-		expect(create).toHaveBeenCalledOnce();
+		expect(eventTypes(parts)).not.toContain("error");
+		expect(eventTypes(parts)).toContain("finish");
+		expect(create).toHaveBeenCalledTimes(2);
 		expect(resume).not.toHaveBeenCalled();
+		expect(failed.close).toHaveBeenCalled();
+		expect(getPooledAgentId("s1")).toBe("a2");
 	});
 
 	it("does not retry when the abort signal is already fired", async () => {

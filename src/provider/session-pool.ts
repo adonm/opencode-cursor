@@ -132,6 +132,8 @@ export interface AcquiredAgent {
 	resumed: boolean;
 	/** Close the agent unless it's pooled (pooled agents persist for the next turn). */
 	release: () => void;
+	/** Close a failed agent and remove its pool record so it cannot be resumed. */
+	discard: () => void;
 }
 
 /**
@@ -207,5 +209,20 @@ export async function acquireAgent(
 		}
 	};
 
-	return { agent, resumed, release };
+	const discard = () => {
+		try {
+			agent!.close();
+		} catch {
+			// best effort
+		}
+		if (params.poolKey !== undefined) {
+			hydrate();
+			if (pool.get(params.poolKey)?.agentId === agent!.agentId) {
+				pool.delete(params.poolKey);
+				saveSessionRecords(pool);
+			}
+		}
+	};
+
+	return { agent, resumed, release, discard };
 }

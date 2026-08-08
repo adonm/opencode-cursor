@@ -10,9 +10,19 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 
+/** Terminal run shape consumed from Cursor SDK 1.0.27. */
+export interface AgentRunResultLike {
+  status: string;
+  result?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
 /** Minimal run surface the provider consumes (subset of the SDK's Run). */
 export interface AgentRunLike {
-  wait(): Promise<{ status: string; result?: string }>;
+  wait(): Promise<AgentRunResultLike>;
   cancel(): void | Promise<void>;
 }
 
@@ -53,7 +63,7 @@ interface Pending {
   reject: (err: Error) => void;
   /** Streaming hooks for "send" requests. */
   onUpdate?: (update: Record<string, unknown> & { type: string }) => void;
-  onResult?: (result: { status: string; result?: string }) => void;
+  onResult?: (result: AgentRunResultLike) => void;
   onStreamError?: (err: Error) => void;
 }
 
@@ -182,7 +192,7 @@ export class SidecarClient {
     if (ev === "result") {
       this.pending.delete(id);
       this.updateRefs();
-      pending.onResult?.(msg["result"] as { status: string; result?: string });
+      pending.onResult?.(msg["result"] as AgentRunResultLike);
       return;
     }
     if (ev === "error") {
@@ -253,10 +263,10 @@ export class SidecarClient {
     options?: AgentSendOptions,
   ): Promise<AgentRunLike> {
     let settle!: {
-      resolve: (r: { status: string; result?: string }) => void;
+      resolve: (r: AgentRunResultLike) => void;
       reject: (e: Error) => void;
     };
-    const waited = new Promise<{ status: string; result?: string }>((resolve, reject) => {
+    const waited = new Promise<AgentRunResultLike>((resolve, reject) => {
       settle = { resolve, reject };
     });
     // Avoid unhandled-rejection noise when the consumer never calls wait().
