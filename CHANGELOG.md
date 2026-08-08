@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - Forked the provider runtime as `@oy-cli/opencode-cursor`, supporting only
   oy's OpenCode V2 integration and removing the legacy plugin export.
+- Committed the verified provider bundle so immutable Git installs work when
+  lifecycle scripts are disabled.
 - Pinned `@cursor/sdk` 1.0.27 so the provider and oy execute against the same
   tested SDK build.
 - Added one bounded fresh-agent replay when a fresh or resumed run fails before

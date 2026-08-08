@@ -24,6 +24,8 @@ delegation tools.
 The public package surface is the `createCursor()` provider factory. oy owns
 OpenCode registration, model discovery, skills, system-boundary instructions,
 and translation between AI SDK events and OpenCode V2's Responses stream.
+The verified `dist/` bundle is committed so oy can pin a Git revision and
+install it with lifecycle scripts disabled.
 
 Direct installation is intended for oy development:
 

@@ -1,0 +1,126 @@
+import { ProviderV3 } from '@ai-sdk/provider';
+import { AgentModeOption, McpServerConfig, SettingSource, AgentDefinition } from '@cursor/sdk';
+
+/**
+ * How Cursor's internal tool activity (shell/read/edit/mcp/…) is surfaced to
+ * opencode:
+ *  - `"blocks"` (default): emitted as provider-executed AI-SDK
+ *    `tool-call`/`tool-result` parts so opencode renders structured tool
+ *    blocks. Requires a V3-native opencode host (1.16+). The parts must carry
+ *    BOTH `providerExecuted: true` AND `dynamic: true` — ai's `parseToolCall`
+ *    (v6, `doParseToolCall`) only exempts that combination from registered-tool
+ *    validation; without `dynamic` an unknown name raises `NoSuchToolError`,
+ *    which opencode's `experimental_repairToolCall` rewrites into its "invalid"
+ *    tool. Names are also prefixed (`cursor_…`) so they can never collide with
+ *    a tool opencode has registered (`read`, `grep`, `task`, …) — a colliding
+ *    name is validated against that tool's input schema instead of being
+ *    treated as dynamic.
+ */
+type ToolDisplay = "reasoning" | "blocks";
+
+/**
+ * How opencode's system prompt reaches the Cursor agent.
+ *  - "rules" (default): delivered out-of-band as a Cursor project rule
+ *    (see system-rule.ts) and therefore omitted from this flattened transcript.
+ *  - "message": legacy — inlined as a `# System` block in the transcript.
+ *    Injection-hardened Cursor models may reject this; kept for back-compat.
+ *  - "omit": dropped entirely (no rule, no inline).
+ */
+type SystemPromptMode = "rules" | "message" | "omit";
+
+interface CursorProviderOptions {
+    /**
+     * Cursor API key. opencode passes this from the provider's resolved auth /
+     * options. When omitted, falls back to the CURSOR_API_KEY environment
+     * variable at call time.
+     */
+    apiKey?: string;
+    /** Provider id, supplied by opencode as `name`. Defaults to "cursor". */
+    name?: string;
+    /** Working directory for the local Cursor agent. Defaults to process.cwd(). */
+    cwd?: string;
+    /** Default conversation mode: "agent" (default) or "plan". Overridable per-request. */
+    mode?: AgentModeOption;
+    /** Default Cursor model params (id -> value), e.g. { thinking: "high" }. */
+    params?: Record<string, string>;
+    /**
+     * Per-model floor params keyed by model id, e.g. `{ "composer-2.5": { fast:
+     * "false" } }`. Seeded by the plugin's `config` hook; applied under `params`
+     * and per-request options.
+     */
+    modelParamDefaults?: Record<string, Record<string, string>>;
+    /**
+     * MCP servers to make available to the Cursor agent, keyed by name. The
+     * plugin's `config` hook populates this by translating opencode's configured
+     * `config.mcp` servers, so the agent can use the same MCP servers that
+     * opencode does.
+     */
+    mcpServers?: Record<string, McpServerConfig>;
+    /**
+     * Cursor settings layers to load from the local filesystem ("project",
+     * "user", "all", ...). Enables the agent to pick up your Cursor skills,
+     * rules, and `.cursor/mcp.json` servers.
+     */
+    settingSources?: SettingSource[];
+    /** Run the agent's tools inside Cursor's sandbox. */
+    sandbox?: boolean;
+    /**
+     * Cursor's classifier-backed Auto review mode: gates tool calls through a
+     * classifier instead of running them unconditionally. Defaults to `false`.
+     * Best-effort tool-call gating, not a security boundary.
+     */
+    autoReview?: boolean;
+    /** Cursor subagent definitions (`{ description, prompt, model?, mcpServers? }`). */
+    agents?: Record<string, AgentDefinition>;
+    /**
+     * Session reuse strategy: `"auto"` (default) resumes the pooled Cursor agent
+     * and sends only the new message on a clean continuation, falling back to a
+     * fresh agent + full transcript on edits/reverts/compaction/side calls; `true`
+     * is an alias for `"auto"`; `false` always creates a fresh agent per turn.
+     */
+    session?: boolean | "auto";
+    /**
+     * How Cursor's internal tool activity (shell/read/edit/mcp/…) is surfaced:
+     *  - `"blocks"` (default): structured provider-executed `tool-call`/
+     *    `tool-result` parts so opencode renders proper tool blocks. Requires a
+     *    V3-native opencode host (1.16+).
+     *  - `"reasoning"`: compact reasoning lines; the fallback for older/non-V3
+     *    hosts (works everywhere).
+     */
+    toolDisplay?: ToolDisplay;
+    /**
+     * How opencode's system prompt reaches the Cursor agent:
+     *  - "rules" (default): written to `<cwd>/.cursor/rules/opencode.mdc`
+     *    (git-ignored, alwaysApply) and loaded via the `project` settings layer —
+     *    Cursor's authoritative channel, so it is not rejected as prompt injection.
+     *    Note: a project rule also applies to your own Cursor IDE in this repo, and
+     *    enabling the project layer also loads other `.cursor/` config.
+     *  - "message": legacy inline `# System` block (may be flagged as injection).
+     *  - "omit": not forwarded at all.
+     */
+    systemPrompt?: SystemPromptMode;
+    /**
+     * Transport for Cursor agent traffic: "http1" (in-process, Bun-safe),
+     * "http2-direct" (in-process, Node only), "sidecar" (Node child, rollback).
+     * Beats OPENCODE_CURSOR_TRANSPORT. Process-global: last provider to set it wins.
+     */
+    transport?: "http1" | "http2-direct" | "sidecar";
+    /**
+     * `<available_skills>` catalogue text appended to the generated system rule,
+     * listing mirrored skills so the Cursor agent can discover and load them on
+     * demand. Seeded by the plugin's `config` hook from the resolved skill set.
+     * When undefined, no skills section is appended.
+     */
+    skillsCatalogue?: string;
+}
+/**
+ * Cursor provider for the Vercel AI SDK (V3), backed by the official
+ * `@cursor/sdk` local agent runtime.
+ *
+ * opencode loads this package by its `npm` provider config, finds the export
+ * whose name starts with `create`, calls it with `{ name, apiKey, ...options }`,
+ * and then calls `.languageModel(modelId)`.
+ */
+declare function createCursor(options?: CursorProviderOptions): ProviderV3;
+
+export { type CursorProviderOptions, createCursor };
