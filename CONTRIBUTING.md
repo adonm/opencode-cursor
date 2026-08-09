@@ -64,5 +64,13 @@ The npm package must trust this repository's release workflow and `npm`
 environment. `CURSOR_API_KEY` is optional and used only by the scheduled/manual
 live canary.
 
+For the package's one-time registry bootstrap, npm cannot use OIDC before the
+package exists. From the exact release commit, authenticate interactively and
+run `npm publish --access public`. Then configure npm's trusted publisher for
+`adonm/opencode-cursor`, `.github/workflows/release.yml`, environment `npm`,
+with `npm publish` allowed. Push the matching version tag only after that; the
+idempotent workflow verifies the published `gitHead` and creates the GitHub
+release without republishing.
+
 **Pre-publish checklist:** update `CHANGELOG.md`, confirm `version` in
 `package.json` matches the tag, and ensure the branch is merged to `main`.

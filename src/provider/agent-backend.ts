@@ -19,7 +19,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadCursorSdk } from "../cursor-runtime.js";
 import { installCursorLogInterceptor } from "./cursor-log-intercept.js";
-import { pluginLog } from "./log-bridge.js";
+import { pluginLog, type ProviderLogger } from "./log-bridge.js";
 import { SidecarClient, type AgentLike } from "./sidecar-client.js";
 
 export type {
@@ -154,11 +154,15 @@ export function resolveSidecarScript(): string | undefined {
   return undefined;
 }
 
-function sidecarBackend(nodePath: string, scriptPath: string): AgentBackend {
+function sidecarBackend(
+  nodePath: string,
+  scriptPath: string,
+  logger?: ProviderLogger,
+): AgentBackend {
   const client = new SidecarClient({
     scriptPath,
     nodePath,
-    onLog: (level, message, meta) => pluginLog(level, message, meta),
+    onLog: (level, message, meta) => pluginLog(level, message, meta, logger),
   });
   return {
     kind: "sidecar",
@@ -168,10 +172,12 @@ function sidecarBackend(nodePath: string, scriptPath: string): AgentBackend {
 }
 
 let cached: AgentBackend | undefined;
+let cachedByLogger = new WeakMap<ProviderLogger, AgentBackend>();
 
 /** Resolve (and cache) the agent backend for this process. */
-export function loadAgentBackend(): AgentBackend {
-  if (!cached) {
+export function loadAgentBackend(logger?: ProviderLogger): AgentBackend {
+  let current = logger ? cachedByLogger.get(logger) : cached;
+  if (!current) {
     const env = detectEnvironment();
     const transport = resolveTransport(env);
     const scriptPath = transport === "sidecar" ? resolveSidecarScript() : undefined;
@@ -181,26 +187,32 @@ export function loadAgentBackend(): AgentBackend {
         "warn",
         "Node sidecar requested but unavailable; falling back to in-process HTTP/1.1 transport.",
         { node: env.nodePath ?? null, script: scriptPath ?? null },
+        logger,
       );
-      cached = inProcessBackend(true);
-      return cached;
+      current = inProcessBackend(true);
+    } else {
+      if (transport === "http2-direct" && env.isBun) {
+        pluginLog(
+          "warn",
+          "http2-direct under Bun: Cursor streams may fail (Bun node:http2 incompatibility, oven-sh/bun#31499). " +
+            "Set OPENCODE_CURSOR_TRANSPORT=http1 (recommended) or sidecar.",
+          undefined,
+          logger,
+        );
+      }
+      current =
+        transport === "sidecar" && env.nodePath && scriptPath
+          ? sidecarBackend(env.nodePath, scriptPath, logger)
+          : inProcessBackend(transport === "http1");
     }
-    if (transport === "http2-direct" && env.isBun) {
-      pluginLog(
-        "warn",
-        "http2-direct under Bun: Cursor streams may fail (Bun node:http2 incompatibility, oven-sh/bun#31499). " +
-          "Set OPENCODE_CURSOR_TRANSPORT=http1 (recommended) or sidecar.",
-      );
-    }
-    cached =
-      transport === "sidecar" && env.nodePath && scriptPath
-        ? sidecarBackend(env.nodePath, scriptPath)
-        : inProcessBackend(transport === "http1");
+    if (logger) cachedByLogger.set(logger, current);
+    else cached = current;
   }
-  return cached;
+  return current;
 }
 
 /** Test hook. */
 export function resetAgentBackend(): void {
   cached = undefined;
+  cachedByLogger = new WeakMap();
 }

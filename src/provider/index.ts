@@ -16,10 +16,7 @@ import {
 	CursorLanguageModel,
 	type CursorModelConfig,
 } from "./language-model.js";
-import {
-	setProviderLogger,
-	type ProviderLogger,
-} from "./log-bridge.js";
+import type { ProviderLogger } from "./log-bridge.js";
 import type { ToolDisplay } from "./stream-map.js";
 import type { SystemPromptMode } from "./message-map.js";
 
@@ -121,7 +118,6 @@ export interface CursorProviderOptions {
  */
 export function createCursor(options: CursorProviderOptions = {}): ProviderV3 {
 	if (options.transport) setPreferredTransport(options.transport);
-	setProviderLogger(options.logger);
 	const mcpServers =
 		options.mcpServers && Object.keys(options.mcpServers).length > 0
 			? options.mcpServers
@@ -147,6 +143,7 @@ export function createCursor(options: CursorProviderOptions = {}): ProviderV3 {
 		session: options.session ?? "auto",
 		toolDisplay: options.toolDisplay ?? "blocks",
 		systemPrompt: options.systemPrompt ?? "rules",
+		...(options.logger ? { logger: options.logger } : {}),
 		...(options.skillsCatalogue
 			? { skillsCatalogue: options.skillsCatalogue }
 			: {}),

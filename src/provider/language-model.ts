@@ -23,7 +23,11 @@ import {
 } from "./message-map.js";
 import { extractSystemText, resolveSystemDelivery } from "./system-rule.js";
 import { classifyError } from "./error-classify.js";
-import { pluginLog } from "./log-bridge.js";
+import {
+	pluginLog,
+	type ProviderLogger,
+	withProviderLogger,
+} from "./log-bridge.js";
 import {
 	addUsage,
 	CursorRunError,
@@ -78,6 +82,8 @@ export interface CursorModelConfig {
 	autoReview?: boolean;
 	/** Cursor subagent definitions made available to the agent. */
 	agents?: Record<string, AgentDefinition>;
+	/** Provider-scoped structured diagnostics sink. */
+	logger?: ProviderLogger;
 	/**
 	 * Session reuse strategy:
 	 *  - `"auto"` (default): fingerprint-guarded reuse — resume the pooled Cursor
@@ -347,6 +353,7 @@ export class CursorLanguageModel implements LanguageModelV3 {
 					: {}),
 				...(mcpServers ? { mcpServers } : {}),
 				...(this.config.agents ? { agents: this.config.agents } : {}),
+				...(this.config.logger ? { logger: this.config.logger } : {}),
 				...(poolKey ? { name: `opencode/${sessionID!.slice(-8)}` } : {}),
 				...(poolKey ? { poolKey } : {}),
 				...(record ? { record } : {}),
@@ -548,22 +555,24 @@ export class CursorLanguageModel implements LanguageModelV3 {
 	async doStream(options: LanguageModelV3CallOptions): Promise<{
 		stream: ReadableStream<LanguageModelV3StreamPart>;
 	}> {
-		// Parent opencode session id (same source agentRun reads) so a Cursor
-		// subagent's `task` part can be linked to a real opencode child session.
-		const po = options.providerOptions?.[this.provider] as
-			| Record<string, unknown>
-			| undefined;
-		const sessionID =
-			typeof po?.["sessionID"] === "string"
-				? (po["sessionID"] as string)
-				: undefined;
-		return {
-			stream: cursorEventsToStream(
-				this.agentRun(options),
-				effectiveToolDisplay(this.config.toolDisplay, options.tools),
-				{ sessionID },
-			),
-		};
+		return withProviderLogger(this.config.logger, () => {
+			// Parent opencode session id (same source agentRun reads) so a Cursor
+			// subagent's `task` part can be linked to a real opencode child session.
+			const po = options.providerOptions?.[this.provider] as
+				| Record<string, unknown>
+				| undefined;
+			const sessionID =
+				typeof po?.["sessionID"] === "string"
+					? (po["sessionID"] as string)
+					: undefined;
+			return {
+				stream: cursorEventsToStream(
+					this.agentRun(options),
+					effectiveToolDisplay(this.config.toolDisplay, options.tools),
+					{ sessionID },
+				),
+			};
+		});
 	}
 
 	async doGenerate(options: LanguageModelV3CallOptions): Promise<{
@@ -572,10 +581,12 @@ export class CursorLanguageModel implements LanguageModelV3 {
 		usage: LanguageModelV3Usage;
 		warnings: Array<never>;
 	}> {
-		const result = await cursorEventsToContent(
-			this.agentRun(options),
-			effectiveToolDisplay(this.config.toolDisplay, options.tools),
-		);
-		return { ...result, warnings: [] };
+		return withProviderLogger(this.config.logger, async () => {
+			const result = await cursorEventsToContent(
+				this.agentRun(options),
+				effectiveToolDisplay(this.config.toolDisplay, options.tools),
+			);
+			return { ...result, warnings: [] };
+		});
 	}
 }

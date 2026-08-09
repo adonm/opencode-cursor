@@ -1,6 +1,6 @@
 {
   "name": "@oy-cli/opencode-cursor",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "description": "Provider-only Cursor SDK runtime for the OpenCode V2 integration in @oy-cli/opencode",
   "type": "module",
   "license": "MIT",

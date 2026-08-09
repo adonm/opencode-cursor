@@ -6,6 +6,7 @@ import type {
 	SettingSource,
 } from "@cursor/sdk";
 import { loadAgentBackend, type AgentLike } from "./agent-backend.js";
+import type { ProviderLogger } from "./log-bridge.js";
 import {
 	deleteSessionStore,
 	loadSessionRecords,
@@ -108,6 +109,7 @@ export interface AcquireAgentParams {
 	autoReview?: boolean;
 	mcpServers?: Record<string, McpServerConfig>;
 	agents?: Record<string, AgentDefinition>;
+	logger?: ProviderLogger;
 	name?: string;
 	/**
 	 * Resume this Cursor agent before falling back to a fresh create. Set for a
@@ -146,7 +148,7 @@ export interface AcquiredAgent {
 export async function acquireAgent(
 	params: AcquireAgentParams,
 ): Promise<AcquiredAgent> {
-	const backend = loadAgentBackend();
+	const backend = loadAgentBackend(params.logger);
 
 	const createOptions = {
 		apiKey: params.apiKey,

@@ -37,17 +37,16 @@ async function loadCursorSdk() {
 }
 
 // src/provider/log-bridge.ts
-var LOGGER_KEY = /* @__PURE__ */ Symbol.for("@oy-cli/opencode-cursor:logger");
-function setProviderLogger(logger) {
-  if (logger) globalThis[LOGGER_KEY] = logger;
-  else delete globalThis[LOGGER_KEY];
+import { AsyncLocalStorage } from "async_hooks";
+var loggerContext = new AsyncLocalStorage();
+function withProviderLogger(logger, operation) {
+  return logger ? loggerContext.run(logger, operation) : operation();
 }
 function getProviderLogger() {
-  return globalThis[LOGGER_KEY];
+  return loggerContext.getStore();
 }
 var SERVICE = "opencode-cursor";
-function pluginLog(level, message, extra) {
-  const logger = getProviderLogger();
+function pluginLog(level, message, extra, logger = getProviderLogger()) {
   if (logger) {
     try {
       logger(level, message, extra);
@@ -401,11 +400,11 @@ function resolveSidecarScript() {
   }
   return void 0;
 }
-function sidecarBackend(nodePath, scriptPath) {
+function sidecarBackend(nodePath, scriptPath, logger) {
   const client = new SidecarClient({
     scriptPath,
     nodePath,
-    onLog: (level, message, meta) => pluginLog(level, message, meta)
+    onLog: (level, message, meta) => pluginLog(level, message, meta, logger)
   });
   return {
     kind: "sidecar",
@@ -414,8 +413,10 @@ function sidecarBackend(nodePath, scriptPath) {
   };
 }
 var cached2;
-function loadAgentBackend() {
-  if (!cached2) {
+var cachedByLogger = /* @__PURE__ */ new WeakMap();
+function loadAgentBackend(logger) {
+  let current = logger ? cachedByLogger.get(logger) : cached2;
+  if (!current) {
     const env = detectEnvironment();
     const transport = resolveTransport(env);
     const scriptPath = transport === "sidecar" ? resolveSidecarScript() : void 0;
@@ -423,20 +424,25 @@ function loadAgentBackend() {
       pluginLog(
         "warn",
         "Node sidecar requested but unavailable; falling back to in-process HTTP/1.1 transport.",
-        { node: env.nodePath ?? null, script: scriptPath ?? null }
+        { node: env.nodePath ?? null, script: scriptPath ?? null },
+        logger
       );
-      cached2 = inProcessBackend(true);
-      return cached2;
+      current = inProcessBackend(true);
+    } else {
+      if (transport === "http2-direct" && env.isBun) {
+        pluginLog(
+          "warn",
+          "http2-direct under Bun: Cursor streams may fail (Bun node:http2 incompatibility, oven-sh/bun#31499). Set OPENCODE_CURSOR_TRANSPORT=http1 (recommended) or sidecar.",
+          void 0,
+          logger
+        );
+      }
+      current = transport === "sidecar" && env.nodePath && scriptPath ? sidecarBackend(env.nodePath, scriptPath, logger) : inProcessBackend(transport === "http1");
     }
-    if (transport === "http2-direct" && env.isBun) {
-      pluginLog(
-        "warn",
-        "http2-direct under Bun: Cursor streams may fail (Bun node:http2 incompatibility, oven-sh/bun#31499). Set OPENCODE_CURSOR_TRANSPORT=http1 (recommended) or sidecar."
-      );
-    }
-    cached2 = transport === "sidecar" && env.nodePath && scriptPath ? sidecarBackend(env.nodePath, scriptPath) : inProcessBackend(transport === "http1");
+    if (logger) cachedByLogger.set(logger, current);
+    else cached2 = current;
   }
-  return cached2;
+  return current;
 }
 
 // src/provider/language-model.ts
@@ -2135,7 +2141,7 @@ function withSessionLock(sessionID, fn) {
   return run;
 }
 async function acquireAgent(params) {
-  const backend = loadAgentBackend();
+  const backend = loadAgentBackend(params.logger);
   const createOptions = {
     apiKey: params.apiKey,
     model: params.modelSelection,
@@ -2392,6 +2398,7 @@ var CursorLanguageModel = class {
         ...this.config.autoReview !== void 0 ? { autoReview: this.config.autoReview } : {},
         ...mcpServers ? { mcpServers } : {},
         ...this.config.agents ? { agents: this.config.agents } : {},
+        ...this.config.logger ? { logger: this.config.logger } : {},
         ...poolKey ? { name: `opencode/${sessionID.slice(-8)}` } : {},
         ...poolKey ? { poolKey } : {},
         ...record2 ? { record: record2 } : {}
@@ -2537,29 +2544,32 @@ var CursorLanguageModel = class {
     }
   }
   async doStream(options) {
-    const po = options.providerOptions?.[this.provider];
-    const sessionID = typeof po?.["sessionID"] === "string" ? po["sessionID"] : void 0;
-    return {
-      stream: cursorEventsToStream(
-        this.agentRun(options),
-        effectiveToolDisplay(this.config.toolDisplay, options.tools),
-        { sessionID }
-      )
-    };
+    return withProviderLogger(this.config.logger, () => {
+      const po = options.providerOptions?.[this.provider];
+      const sessionID = typeof po?.["sessionID"] === "string" ? po["sessionID"] : void 0;
+      return {
+        stream: cursorEventsToStream(
+          this.agentRun(options),
+          effectiveToolDisplay(this.config.toolDisplay, options.tools),
+          { sessionID }
+        )
+      };
+    });
   }
   async doGenerate(options) {
-    const result = await cursorEventsToContent(
-      this.agentRun(options),
-      effectiveToolDisplay(this.config.toolDisplay, options.tools)
-    );
-    return { ...result, warnings: [] };
+    return withProviderLogger(this.config.logger, async () => {
+      const result = await cursorEventsToContent(
+        this.agentRun(options),
+        effectiveToolDisplay(this.config.toolDisplay, options.tools)
+      );
+      return { ...result, warnings: [] };
+    });
   }
 };
 
 // src/provider/index.ts
 function createCursor(options = {}) {
   if (options.transport) setPreferredTransport(options.transport);
-  setProviderLogger(options.logger);
   const mcpServers = options.mcpServers && Object.keys(options.mcpServers).length > 0 ? options.mcpServers : void 0;
   const config = {
     providerName: options.name ?? "cursor",
@@ -2576,6 +2586,7 @@ function createCursor(options = {}) {
     session: options.session ?? "auto",
     toolDisplay: options.toolDisplay ?? "blocks",
     systemPrompt: options.systemPrompt ?? "rules",
+    ...options.logger ? { logger: options.logger } : {},
     ...options.skillsCatalogue ? { skillsCatalogue: options.skillsCatalogue } : {}
   };
   const notImplemented = (kind, modelId) => {

@@ -590,4 +590,61 @@ describe("CursorLanguageModel — no-tools turns fold tool activity into reasoni
 			.join("");
 		expect(reasoning).toContain("context-mode_ctx_search");
 	});
+
+	it("keeps concurrent model diagnostics with their provider logger", async () => {
+		const previousDebug = process.env["OPENCODE_CURSOR_DEBUG"];
+		process.env["OPENCODE_CURSOR_DEBUG"] = "1";
+		const firstLog = vi.fn();
+		const secondLog = vi.fn();
+		const config = {
+			cwd: "/tmp",
+			mode: "agent" as const,
+			session: false,
+			systemPrompt: "omit" as const,
+		};
+		const first = new CursorLanguageModel("first-model", {
+			...config,
+			providerName: "first",
+			logger: firstLog,
+		});
+		const second = new CursorLanguageModel("second-model", {
+			...config,
+			providerName: "second",
+			logger: secondLog,
+		});
+		create
+			.mockResolvedValueOnce(fakeAgent({ agentId: "first-agent" }))
+			.mockResolvedValueOnce(fakeAgent({ agentId: "second-agent" }));
+
+		try {
+			await Promise.all([
+				collectStream(streamCall(first, { prompt: [user("one")] } as never)),
+				collectStream(streamCall(second, { prompt: [user("two")] } as never)),
+			]);
+		} finally {
+			if (previousDebug === undefined) delete process.env["OPENCODE_CURSOR_DEBUG"];
+			else process.env["OPENCODE_CURSOR_DEBUG"] = previousDebug;
+		}
+
+		expect(firstLog).toHaveBeenCalledWith(
+			"debug",
+			"model call",
+			expect.objectContaining({ model: "first-model" }),
+		);
+		expect(firstLog).not.toHaveBeenCalledWith(
+			"debug",
+			"model call",
+			expect.objectContaining({ model: "second-model" }),
+		);
+		expect(secondLog).toHaveBeenCalledWith(
+			"debug",
+			"model call",
+			expect.objectContaining({ model: "second-model" }),
+		);
+		expect(secondLog).not.toHaveBeenCalledWith(
+			"debug",
+			"model call",
+			expect.objectContaining({ model: "first-model" }),
+		);
+	});
 });

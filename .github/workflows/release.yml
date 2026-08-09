@@ -37,7 +37,7 @@ jobs:
 
       # Hard gate: the git tag must match the version we are about to publish.
       # npm publishes package.json's version regardless of the tag, so without
-      # this a v0.2.0 tag on a 0.1.0 package.json would ship 0.1.0 silently.
+      # this a v0.9.0 tag on a 0.8.0 package.json would ship 0.8.0 silently.
       - name: Verify tag matches package.json version
         run: |
           PKG_VERSION="$(node -p "require('./package.json').version")"
@@ -63,13 +63,16 @@ jobs:
       - name: Typecheck, test, and build
         run: npm run prepublishOnly
 
+      - name: Verify committed bundle matches source
+        run: git diff --exit-code -- dist
+
       - name: Pack release artifact
         run: npm pack --ignore-scripts
 
       - name: Verify release bundle import
         run: node --input-type=module -e 'import("./dist/provider/index.js").then(({createCursor}) => { if (typeof createCursor !== "function") process.exit(1) })'
 
-      # A tag with a pre-release suffix (e.g. v0.1.0-rc.1) publishes to the
+      # A tag with a pre-release suffix (e.g. v0.8.0-rc.1) publishes to the
       # `next` dist-tag and is flagged as a GitHub pre-release, so `npm install`
       # and the repo's "Latest" release keep pointing at the last stable.
       - name: Classify release from tag

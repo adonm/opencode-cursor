@@ -4,11 +4,10 @@ import {
   parseCursorRuleLoadLine,
   resetCursorLogInterceptor,
 } from "../src/provider/cursor-log-intercept.js";
-import { setProviderLogger } from "../src/provider/log-bridge.js";
+import { withProviderLogger } from "../src/provider/log-bridge.js";
 
 afterEach(() => {
   resetCursorLogInterceptor();
-  setProviderLogger(undefined);
 });
 
 describe("parseCursorRuleLoadLine", () => {
@@ -58,15 +57,15 @@ describe("parseCursorRuleLoadLine", () => {
 describe("installCursorLogInterceptor", () => {
   it("routes recognized lines through pluginLog and passes everything else to the original console.log", () => {
     const log = vi.fn();
-    setProviderLogger(log);
 
     const passthrough = vi.spyOn(console, "log").mockImplementation(() => {});
-    installCursorLogInterceptor();
-
-    console.log(
-      "16:05:53.036 INFO  LocalCursorRulesService load completed meta={durationMs: 89, ruleCount: 1}",
-    );
-    console.log("totally unrelated output", 42);
+    withProviderLogger(log, () => {
+      installCursorLogInterceptor();
+      console.log(
+        "16:05:53.036 INFO  LocalCursorRulesService load completed meta={durationMs: 89, ruleCount: 1}",
+      );
+      console.log("totally unrelated output", 42);
+    });
 
     expect(log).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith(

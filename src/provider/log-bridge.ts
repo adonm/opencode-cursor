@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export type ProviderLogger = (
 	level: LogLevel,
@@ -5,18 +7,18 @@ export type ProviderLogger = (
 	extra?: Record<string, unknown>,
 ) => void;
 
-const LOGGER_KEY = Symbol.for("@oy-cli/opencode-cursor:logger");
+const loggerContext = new AsyncLocalStorage<ProviderLogger>();
 
-type LoggerHolder = { [LOGGER_KEY]?: ProviderLogger };
-
-/** Install a process-level provider logger for the embedding OpenCode adapter. */
-export function setProviderLogger(logger: ProviderLogger | undefined): void {
-	if (logger) (globalThis as LoggerHolder)[LOGGER_KEY] = logger;
-	else delete (globalThis as LoggerHolder)[LOGGER_KEY];
+/** Run one provider operation with its own structured diagnostics sink. */
+export function withProviderLogger<T>(
+	logger: ProviderLogger | undefined,
+	operation: () => T,
+): T {
+	return logger ? loggerContext.run(logger, operation) : operation();
 }
 
 export function getProviderLogger(): ProviderLogger | undefined {
-	return (globalThis as LoggerHolder)[LOGGER_KEY];
+	return loggerContext.getStore();
 }
 
 const SERVICE = "opencode-cursor";
@@ -29,8 +31,8 @@ export function pluginLog(
 	level: LogLevel,
 	message: string,
 	extra?: Record<string, unknown>,
+	logger = getProviderLogger(),
 ): void {
-	const logger = getProviderLogger();
 	if (logger) {
 		try {
 			logger(level, message, extra);

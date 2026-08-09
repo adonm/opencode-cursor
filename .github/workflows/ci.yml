@@ -53,6 +53,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify committed bundle matches source
+        run: git diff --exit-code -- dist
+
   package:
     name: script-disabled package install (node 26)
     if: github.event_name == 'push' || github.event_name == 'pull_request'

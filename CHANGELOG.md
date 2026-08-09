@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-08-09
+## [0.8.0] — 2026-08-09
 
 - Forked the provider runtime as `@oy-cli/opencode-cursor`, supporting only
   oy's OpenCode V2 integration.
@@ -19,8 +19,12 @@ All notable changes to this project will be documented in this file.
 - Added terminal-status diagnostics with Cursor result details and SDK update
   counts.
 - Added a dependency-free structured logger callback for oy's V2 bridge.
+- Scoped structured loggers per provider operation so concurrent providers
+  cannot replace or receive each other's diagnostics.
 - CI covers current Node 24 and 26 releases; tagged releases use npm trusted
   publishing and attach the package tarball to the GitHub release.
+- Continued the repository's existing version line at 0.8.0 so release tags
+  remain immutable.
 - Routed silent interjection turns through the same watchdog-protected stream
   path as visible turns.
 - Failed agents are now closed and removed from the persistent session pool.
