@@ -7,15 +7,20 @@ All notable changes to this project will be documented in this file.
 ## [0.1.0] — 2026-08-09
 
 - Forked the provider runtime as `@oy-cli/opencode-cursor`, supporting only
-  oy's OpenCode V2 integration and removing the legacy plugin export.
-- Committed the verified provider bundle so immutable Git installs work when
-  lifecycle scripts are disabled.
+  oy's OpenCode V2 integration.
+- Removed the unexported legacy plugin, catalog, installer, delegation tools,
+  skill mirroring, update checker, and their OpenCode SDK dependencies.
+- Committed the verified provider bundle and added a script-disabled package
+  install check.
 - Pinned `@cursor/sdk` 1.0.27 so the provider and oy execute against the same
   tested SDK build.
 - Added one bounded fresh-agent replay when a fresh or resumed run fails before
   emitting output.
 - Added terminal-status diagnostics with Cursor result details and SDK update
   counts.
+- Added a dependency-free structured logger callback for oy's V2 bridge.
+- CI covers current Node 24 and 26 releases; tagged releases use npm trusted
+  publishing and attach the package tarball to the GitHub release.
 - Routed silent interjection turns through the same watchdog-protected stream
   path as visible turns.
 - Failed agents are now closed and removed from the persistent session pool.

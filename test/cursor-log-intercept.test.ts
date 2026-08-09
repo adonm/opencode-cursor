@@ -4,11 +4,11 @@ import {
   parseCursorRuleLoadLine,
   resetCursorLogInterceptor,
 } from "../src/provider/cursor-log-intercept.js";
-import { clearLogBridge, setLogBridge } from "../src/provider/log-bridge.js";
+import { setProviderLogger } from "../src/provider/log-bridge.js";
 
 afterEach(() => {
   resetCursorLogInterceptor();
-  clearLogBridge();
+  setProviderLogger(undefined);
 });
 
 describe("parseCursorRuleLoadLine", () => {
@@ -57,8 +57,8 @@ describe("parseCursorRuleLoadLine", () => {
 
 describe("installCursorLogInterceptor", () => {
   it("routes recognized lines through pluginLog and passes everything else to the original console.log", () => {
-    const log = vi.fn().mockResolvedValue(undefined);
-    setLogBridge({ client: { app: { log } } as never });
+    const log = vi.fn();
+    setProviderLogger(log);
 
     const passthrough = vi.spyOn(console, "log").mockImplementation(() => {});
     installCursorLogInterceptor();
@@ -69,14 +69,11 @@ describe("installCursorLogInterceptor", () => {
     console.log("totally unrelated output", 42);
 
     expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith({
-      body: {
-        service: "opencode-cursor",
-        level: "info",
-        message: "LocalCursorRulesService load completed",
-        extra: { durationMs: 89, ruleCount: 1 },
-      },
-    });
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "LocalCursorRulesService load completed",
+      { durationMs: 89, ruleCount: 1 },
+    );
 
     resetCursorLogInterceptor();
     // The spy is the pre-interceptor console.log; passthrough calls must

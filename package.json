@@ -1,10 +1,13 @@
 {
   "name": "@oy-cli/opencode-cursor",
   "version": "0.1.0",
-  "description": "Cursor SDK provider runtime focused on the OpenCode V2 integration in @oy-cli/opencode",
+  "description": "Provider-only Cursor SDK runtime for the OpenCode V2 integration in @oy-cli/opencode",
   "type": "module",
   "license": "MIT",
-  "author": "justin-carper (https://github.com/justin-carper)",
+  "author": "adonm",
+  "contributors": [
+    "justin-carper (https://github.com/justin-carper)"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/adonm/opencode-cursor.git"
@@ -14,7 +17,7 @@
     "url": "https://github.com/adonm/opencode-cursor/issues"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.15.0"
   },
   "keywords": [
     "opencode",
@@ -46,7 +49,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts --passWithNoTests",
-    "sync:model-limits": "node scripts/sync-model-limits-cli.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -64,11 +66,7 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.13",
-    "@opencode-ai/plugin": "^1.18.4",
-    "@opencode-ai/sdk": "^1.18.4",
     "@types/node": "^26.0.0",
-    "@types/semver": "^7.7.1",
-    "semver": "^7.8.4",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

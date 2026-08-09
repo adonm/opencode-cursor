@@ -1,66 +1,45 @@
-import type { OpencodeClient } from "@opencode-ai/sdk";
-
 export type LogLevel = "debug" | "info" | "warn" | "error";
+export type ProviderLogger = (
+	level: LogLevel,
+	message: string,
+	extra?: Record<string, unknown>,
+) => void;
 
-export interface LogBridge {
-	client: OpencodeClient;
-	/** Workspace directory forwarded on each log call. */
-	directory?: string;
+const LOGGER_KEY = Symbol.for("@oy-cli/opencode-cursor:logger");
+
+type LoggerHolder = { [LOGGER_KEY]?: ProviderLogger };
+
+/** Install a process-level provider logger for the embedding OpenCode adapter. */
+export function setProviderLogger(logger: ProviderLogger | undefined): void {
+	if (logger) (globalThis as LoggerHolder)[LOGGER_KEY] = logger;
+	else delete (globalThis as LoggerHolder)[LOGGER_KEY];
 }
 
-const BRIDGE_KEY = Symbol.for("@stablekernel/opencode-cursor:log-bridge");
-
-type BridgeHolder = { [BRIDGE_KEY]?: LogBridge };
-
-/** Publish the opencode client + directory for the provider to log through. */
-export function setLogBridge(bridge: LogBridge): void {
-	(globalThis as BridgeHolder)[BRIDGE_KEY] = bridge;
-}
-
-/** Drop the bridge (plugin dispose). */
-export function clearLogBridge(): void {
-	delete (globalThis as BridgeHolder)[BRIDGE_KEY];
-}
-
-/** Read the current bridge, or `undefined` when the plugin hasn't published one. */
-export function getLogBridge(): LogBridge | undefined {
-	return (globalThis as BridgeHolder)[BRIDGE_KEY];
+export function getProviderLogger(): ProviderLogger | undefined {
+	return (globalThis as LoggerHolder)[LOGGER_KEY];
 }
 
 const SERVICE = "opencode-cursor";
 
 /**
- * Structured log emission for the provider layer, which has no direct access
- * to the opencode client. Routes through `client.app.log()` (see
- * `plugins.mdx`) when the plugin has published a bridge via
- * {@link setLogBridge}; otherwise falls back to `console.*` so the provider
- * still surfaces diagnostics when used standalone (tests, scripts, or the
- * provider package without the plugin).
- *
- * Best-effort: a failed `app.log` call (e.g. server unavailable) is swallowed
- * rather than thrown, matching every other fire-and-forget client call in
- * this plugin.
+ * Best-effort structured logging. Embedders can install a logger without
+ * pulling OpenCode SDK types into this provider-only package.
  */
 export function pluginLog(
 	level: LogLevel,
 	message: string,
 	extra?: Record<string, unknown>,
 ): void {
-	const bridge = getLogBridge();
-	if (bridge) {
-		void bridge.client.app
-			.log({
-				body: {
-					service: SERVICE,
-					level,
-					message,
-					...(extra ? { extra } : {}),
-				},
-				...(bridge.directory ? { query: { directory: bridge.directory } } : {}),
-			})
-			.catch(() => {});
+	const logger = getProviderLogger();
+	if (logger) {
+		try {
+			logger(level, message, extra);
+		} catch {
+			// Diagnostics must never fail a model turn.
+		}
 		return;
 	}
+	if (level === "debug" && process.env["OPENCODE_CURSOR_DEBUG"] !== "1") return;
 	const line = extra
 		? `[${SERVICE}] ${message} ${JSON.stringify(extra)}`
 		: `[${SERVICE}] ${message}`;

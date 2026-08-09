@@ -16,7 +16,7 @@ export default defineConfig({
 		"sidecar/agent-host": "src/sidecar/agent-host.mjs",
 	},
 	format: ["esm"],
-	target: "node22",
+	target: "node24",
 	dts: true,
 	clean: true,
 	sourcemap: true,

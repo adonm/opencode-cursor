@@ -18,6 +18,7 @@ jobs:
   release:
     name: Publish to npm + create GitHub Release
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: write # create the GitHub Release
       id-token: write # npm provenance attestation
@@ -27,9 +28,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "22.x"
+          node-version: "26.x"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+
+      - name: Install OIDC-capable npm
+        run: npm install --global npm@12.0.1
 
       # Hard gate: the git tag must match the version we are about to publish.
       # npm publishes package.json's version regardless of the tag, so without
@@ -59,13 +63,11 @@ jobs:
       - name: Typecheck, test, and build
         run: npm run prepublishOnly
 
-      # Full integration test: install the opencode CLI, load the plugin, and
-      # assert it lists the Cursor provider (fallback path without a key; live
-      # discovery additionally exercised when CURSOR_API_KEY is set).
-      - name: Integration smoke test
-        run: bash scripts/integration-test.sh
-        env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+      - name: Pack release artifact
+        run: npm pack --ignore-scripts
+
+      - name: Verify release bundle import
+        run: node --input-type=module -e 'import("./dist/provider/index.js").then(({createCursor}) => { if (typeof createCursor !== "function") process.exit(1) })'
 
       # A tag with a pre-release suffix (e.g. v0.1.0-rc.1) publishes to the
       # `next` dist-tag and is flagged as a GitHub pre-release, so `npm install`
@@ -90,12 +92,15 @@ jobs:
           PKG="$(node -p "require('./package.json').name")"
           VER="$(node -p "require('./package.json').version")"
           if npm view "$PKG@$VER" version >/dev/null 2>&1; then
-            echo "::notice::$PKG@$VER is already published; skipping publish."
+            PUBLISHED_SHA="$(npm view "$PKG@$VER" gitHead)"
+            if [ "$PUBLISHED_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::$PKG@$VER already exists from unexpected commit $PUBLISHED_SHA"
+              exit 1
+            fi
+            echo "::notice::$PKG@$VER is already published from $PUBLISHED_SHA; skipping."
           else
-            npm publish --provenance --access public --tag "${{ steps.version.outputs.NPM_TAG }}"
+            npm publish --access public --tag "${{ steps.version.outputs.NPM_TAG }}"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -104,3 +109,4 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ steps.version.outputs.PRERELEASE }}
           make_latest: ${{ steps.version.outputs.PRERELEASE == 'false' }}
+          files: oy-cli-opencode-cursor-*.tgz

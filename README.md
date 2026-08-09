@@ -9,14 +9,15 @@ but intentionally supports only the provider boundary used by oy. It does not
 export the upstream legacy OpenCode plugin, installer, model catalog, or
 delegation tools.
 
-> **Security:** Cursor executes its own shell, read, write, edit, delete, MCP,
-> and subagent tools directly in the configured working directory. OpenCode's
-> permission prompts do not mediate those calls. Use Cursor's `sandbox` option
-> when that boundary is unsuitable.
+> **Trust boundary:** Cursor executes its own shell, read, write, edit, delete,
+> MCP, and subagent tools directly on the host. OpenCode permission prompts do
+> not mediate those calls, and an explicitly configured absolute working
+> directory may be outside the initial workspace. Oy keeps this flexible for
+> multi-repository work; use an external container or VM when isolation matters.
 
 ## Runtime contract
 
-- Node.js 22.13 or newer
+- Node.js 24.15 or newer
 - OpenCode V2 through `@oy-cli/opencode`
 - Vercel AI SDK provider V3
 - `@cursor/sdk` 1.0.27
@@ -24,8 +25,8 @@ delegation tools.
 The public package surface is the `createCursor()` provider factory. oy owns
 OpenCode registration, model discovery, skills, system-boundary instructions,
 and translation between AI SDK events and OpenCode V2's Responses stream.
-The verified `dist/` bundle is committed so oy can pin a Git revision and
-install it with lifecycle scripts disabled.
+The verified `dist/` bundle is committed and included in release tarballs so
+installations remain functional when lifecycle scripts are disabled.
 
 Direct installation is intended for oy development:
 
@@ -55,6 +56,8 @@ embedding this provider directly must enforce `undici` 6.28.0 from their root.
   as visible turns.
 - Terminal errors report Cursor's result detail and counts for every SDK update
   type received.
+- Embedders can receive structured provider diagnostics through the `logger`
+  option without depending on an OpenCode SDK.
 
 Environment controls:
 

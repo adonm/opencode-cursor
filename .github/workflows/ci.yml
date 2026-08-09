@@ -1,6 +1,6 @@
 name: CI
 
-# `schedule` and `workflow_dispatch` exist for the model-data-drift job only.
+# `schedule` and `workflow_dispatch` exist for the live Cursor canary only.
 # Triggers are workflow-wide in Actions, so every job below carries an `if:`
 # that scopes it to the events it is actually for.
 on:
@@ -17,14 +17,13 @@ permissions:
 jobs:
   build:
     name: typecheck · test · build (node ${{ matrix.node-version }})
-    # Code CI only. The weekly cron and manual dispatch exist for
-    # model-data-drift; re-running the matrix on them buys nothing.
+    # Code CI only. The weekly/manual triggers are for the live canary.
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["22.x", "24.x"]
+        node-version: ["24.x", "26.x"]
     steps:
       - uses: actions/checkout@v7
 
@@ -54,55 +53,8 @@ jobs:
       - name: Build
         run: npm run build
 
-  model-data-drift:
-    name: model limits · drift vs Cursor docs
-    # Deliberately not on pull_request: this job reaches cursor.com, and PR CI
-    # stays hermetic.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: "24.x"
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check committed model limits against Cursor docs
-        run: |
-          log="$RUNNER_TEMP/drift.log"
-          set +e
-          npm run sync:model-limits -- --check 2>&1 | tee "$log"
-          code=${PIPESTATUS[0]}
-          set -e
-          if [ "$code" = "1" ]; then
-            echo "::error::src/model-limits.ts is stale. Run 'npm run sync:model-limits' and commit."
-            exit 1
-          fi
-          if [ "$code" = "2" ]; then
-            echo "::error::Could not verify model data (docs unreachable, unparseable, or a model id matched nothing). The drift check did not run — treat this as unverified, not as passing."
-            exit 1
-          fi
-          if [ "$code" != "0" ]; then
-            echo "::error::Unexpected exit code $code from the drift check."
-            exit "$code"
-          fi
-          # Exit 0 is only trustworthy if the run also reported its summary. A
-          # bare 0 is what "did nothing at all" looks like, and that has
-          # happened: an entry-point guard once skipped main() entirely and the
-          # job passed for free. Demand the evidence, not just the code.
-          if ! grep -qE 'sync-model-limits: src/model-limits\.ts is up to date \(context: [0-9]+ from docs, [0-9]+ overridden \| cost: [0-9]+ from docs, [0-9]+ overridden \| [0-9]+ model ids\)' "$log"; then
-            echo "::error::Drift check exited 0 without printing a run summary — it did not actually verify anything."
-            exit 1
-          fi
-
-  integration:
-    name: e2e · opencode loads plugin & lists models
-    # Code CI only, same reason as `build`.
+  package:
+    name: script-disabled package install (node 26)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -111,23 +63,50 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: "24.x"
+          node-version: "26.x"
           cache: npm
 
-      - name: Verify lockfile uses only the public npm registry
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify committed provider bundle
+        run: node --input-type=module -e 'import("./dist/provider/index.js").then(({createCursor}) => { if (typeof createCursor !== "function") process.exit(1) })'
+
+      - name: Pack and install without lifecycle scripts
         run: |
-          if grep -E '"resolved":[[:space:]]*"https?://' package-lock.json | grep -vq 'https://registry.npmjs.org/'; then
-            echo "::error::package-lock.json contains non-npmjs resolved URLs:"
-            grep -nE '"resolved":[[:space:]]*"https?://' package-lock.json | grep -v 'https://registry.npmjs.org/' || true
-            exit 1
-          fi
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/package-smoke"
+          cd "$RUNNER_TEMP/package-smoke"
+          npm init --yes >/dev/null
+          npm install --ignore-scripts "$RUNNER_TEMP"/oy-cli-opencode-cursor-*.tgz
+          node --input-type=module -e 'import("@oy-cli/opencode-cursor").then(({createCursor}) => { if (typeof createCursor !== "function") process.exit(1) })'
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+  live-canary:
+    name: live Cursor streaming canary
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26.x"
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install opencode, load the plugin, and list Cursor models
-        run: bash scripts/integration-test.sh
+      - name: Build and run read-only live canary
         env:
-          # Optional: when set, the script additionally verifies live auth and
-          # Cursor.models.list(). Without it, the fallback model path is tested.
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          if [ -z "$CURSOR_API_KEY" ]; then
+            echo "::notice::CURSOR_API_KEY is not configured; skipping live canary"
+            exit 0
+          fi
+          npm run build
+          node scripts/live-chat-smoke.mjs

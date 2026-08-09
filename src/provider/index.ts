@@ -16,6 +16,10 @@ import {
 	CursorLanguageModel,
 	type CursorModelConfig,
 } from "./language-model.js";
+import {
+	setProviderLogger,
+	type ProviderLogger,
+} from "./log-bridge.js";
 import type { ToolDisplay } from "./stream-map.js";
 import type { SystemPromptMode } from "./message-map.js";
 
@@ -96,6 +100,8 @@ export interface CursorProviderOptions {
 	 * Beats OPENCODE_CURSOR_TRANSPORT. Process-global: last provider to set it wins.
 	 */
 	transport?: "http1" | "http2-direct" | "sidecar";
+	/** Structured diagnostics sink supplied by the embedding OpenCode V2 adapter. */
+	logger?: ProviderLogger;
 	/**
 	 * `<available_skills>` catalogue text appended to the generated system rule,
 	 * listing mirrored skills so the Cursor agent can discover and load them on
@@ -115,6 +121,7 @@ export interface CursorProviderOptions {
  */
 export function createCursor(options: CursorProviderOptions = {}): ProviderV3 {
 	if (options.transport) setPreferredTransport(options.transport);
+	setProviderLogger(options.logger);
 	const mcpServers =
 		options.mcpServers && Object.keys(options.mcpServers).length > 0
 			? options.mcpServers

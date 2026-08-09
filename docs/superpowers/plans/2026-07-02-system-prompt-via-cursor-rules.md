@@ -571,11 +571,6 @@ Expected: typecheck clean; all Vitest files pass; tsup build succeeds.
 Run: `rg -n "# System" src`
 Expected: only the `"message"`-mode branch in `src/provider/message-map.ts`.
 
-- [ ] **Step 3 (optional): E2E smoke**
-
-Run: `bash scripts/integration-test.sh`
-Expected: `opencode models` lists `cursor/*`. Skip if opencode CLI isn't installed.
-
 ---
 
 ## Self-review notes

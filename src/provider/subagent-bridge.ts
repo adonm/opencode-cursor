@@ -1,4 +1,9 @@
-import type { OpencodeClient } from "@opencode-ai/sdk";
+interface OpencodeClientLike {
+	session: {
+		create(input: unknown): Promise<{ data?: { id?: string } } | undefined>;
+		prompt(input: unknown): Promise<unknown>;
+	};
+}
 
 /**
  * Bridge from the opencode plugin to the provider stream layer.
@@ -18,12 +23,12 @@ import type { OpencodeClient } from "@opencode-ai/sdk";
  * its previous non-navigable behavior.
  */
 export interface SubagentBridge {
-	client: OpencodeClient;
+	client: OpencodeClientLike;
 	/** Workspace directory threaded into session create/prompt calls. */
 	directory?: string;
 }
 
-const BRIDGE_KEY = Symbol.for("@stablekernel/opencode-cursor:subagent-bridge");
+const BRIDGE_KEY = Symbol.for("@oy-cli/opencode-cursor:subagent-bridge");
 
 type BridgeHolder = { [BRIDGE_KEY]?: SubagentBridge };
 

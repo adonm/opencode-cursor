@@ -37,26 +37,25 @@ async function loadCursorSdk() {
 }
 
 // src/provider/log-bridge.ts
-var BRIDGE_KEY = /* @__PURE__ */ Symbol.for("@stablekernel/opencode-cursor:log-bridge");
-function getLogBridge() {
-  return globalThis[BRIDGE_KEY];
+var LOGGER_KEY = /* @__PURE__ */ Symbol.for("@oy-cli/opencode-cursor:logger");
+function setProviderLogger(logger) {
+  if (logger) globalThis[LOGGER_KEY] = logger;
+  else delete globalThis[LOGGER_KEY];
+}
+function getProviderLogger() {
+  return globalThis[LOGGER_KEY];
 }
 var SERVICE = "opencode-cursor";
 function pluginLog(level, message, extra) {
-  const bridge = getLogBridge();
-  if (bridge) {
-    void bridge.client.app.log({
-      body: {
-        service: SERVICE,
-        level,
-        message,
-        ...extra ? { extra } : {}
-      },
-      ...bridge.directory ? { query: { directory: bridge.directory } } : {}
-    }).catch(() => {
-    });
+  const logger = getProviderLogger();
+  if (logger) {
+    try {
+      logger(level, message, extra);
+    } catch {
+    }
     return;
   }
+  if (level === "debug" && process.env["OPENCODE_CURSOR_DEBUG"] !== "1") return;
   const line = extra ? `[${SERVICE}] ${message} ${JSON.stringify(extra)}` : `[${SERVICE}] ${message}`;
   switch (level) {
     case "debug":
@@ -975,9 +974,9 @@ async function sendAgentTurnSilently(agent, message, options) {
 }
 
 // src/provider/subagent-bridge.ts
-var BRIDGE_KEY2 = /* @__PURE__ */ Symbol.for("@stablekernel/opencode-cursor:subagent-bridge");
+var BRIDGE_KEY = /* @__PURE__ */ Symbol.for("@oy-cli/opencode-cursor:subagent-bridge");
 function getSubagentBridge() {
-  return globalThis[BRIDGE_KEY2];
+  return globalThis[BRIDGE_KEY];
 }
 function isRecord(v) {
   return typeof v === "object" && v !== null;
@@ -2560,6 +2559,7 @@ var CursorLanguageModel = class {
 // src/provider/index.ts
 function createCursor(options = {}) {
   if (options.transport) setPreferredTransport(options.transport);
+  setProviderLogger(options.logger);
   const mcpServers = options.mcpServers && Object.keys(options.mcpServers).length > 0 ? options.mcpServers : void 0;
   const config = {
     providerName: options.name ?? "cursor",

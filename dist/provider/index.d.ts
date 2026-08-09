@@ -1,6 +1,9 @@
 import { ProviderV3 } from '@ai-sdk/provider';
 import { AgentModeOption, McpServerConfig, SettingSource, AgentDefinition } from '@cursor/sdk';
 
+type LogLevel = "debug" | "info" | "warn" | "error";
+type ProviderLogger = (level: LogLevel, message: string, extra?: Record<string, unknown>) => void;
+
 /**
  * How Cursor's internal tool activity (shell/read/edit/mcp/…) is surfaced to
  * opencode:
@@ -105,6 +108,8 @@ interface CursorProviderOptions {
      * Beats OPENCODE_CURSOR_TRANSPORT. Process-global: last provider to set it wins.
      */
     transport?: "http1" | "http2-direct" | "sidecar";
+    /** Structured diagnostics sink supplied by the embedding OpenCode V2 adapter. */
+    logger?: ProviderLogger;
     /**
      * `<available_skills>` catalogue text appended to the generated system rule,
      * listing mirrored skills so the Cursor agent can discover and load them on

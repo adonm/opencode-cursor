@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelListItem } from "@cursor/sdk";
 import { resolveControls } from "../src/provider/controls.js";
-import { buildModelVariants } from "../src/model-variants.js";
 
 describe("resolveControls", () => {
   it("defaults to static mode and no params", () => {
@@ -70,5 +68,3 @@ describe("resolveControls", () => {
     expect(r.modelSelection.params).toEqual([{ id: "fast", value: "true" }]);
   });
 });
-
-// buildModelVariants behavior is covered in test/model-variants.test.ts.
