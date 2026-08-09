@@ -21,6 +21,8 @@ All notable changes to this project will be documented in this file.
 - Added a dependency-free structured logger callback for oy's V2 bridge.
 - Scoped structured loggers per provider operation so concurrent providers
   cannot replace or receive each other's diagnostics.
+- Mapped Cursor's noncached, cache-read, cache-write, and reasoning usage into
+  the AI SDK fields without dropping or double-counting token classes.
 - CI covers current Node 24 and 26 releases; tagged releases use npm trusted
   publishing and attach the package tarball to the GitHub release.
 - Continued the repository's existing version line at 0.8.0 so release tags

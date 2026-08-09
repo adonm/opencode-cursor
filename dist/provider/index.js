@@ -713,11 +713,13 @@ var CursorRunError = class extends Error {
 function addUsage(a, b) {
   if (!a) return b;
   if (!b) return a;
+  const hasReasoning = a.reasoningTokens !== void 0 || b.reasoningTokens !== void 0;
   return {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
-    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    ...hasReasoning ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) } : {}
   };
 }
 function toolDisplayName(toolCall) {
@@ -1697,15 +1699,15 @@ var EMPTY_USAGE = {
 function mapUsage(usage) {
   return {
     inputTokens: {
-      total: usage.inputTokens,
-      noCache: void 0,
+      total: usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
+      noCache: usage.inputTokens,
       cacheRead: usage.cacheReadTokens,
       cacheWrite: usage.cacheWriteTokens
     },
     outputTokens: {
       total: usage.outputTokens,
       text: void 0,
-      reasoning: void 0
+      reasoning: usage.reasoningTokens
     }
   };
 }

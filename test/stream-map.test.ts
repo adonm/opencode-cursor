@@ -91,7 +91,7 @@ describe("cursorEventsToStream", () => {
 		expect(finish).toMatchObject({
 			finishReason: { unified: "stop" },
 			usage: {
-				inputTokens: { total: 10251, cacheRead: 7412 },
+				inputTokens: { total: 17663, noCache: 10251, cacheRead: 7412 },
 				outputTokens: { total: 46 },
 			},
 		});
@@ -517,7 +517,7 @@ describe("cursorEventsToContent (doGenerate)", () => {
 		);
 		expect(finishReason).toMatchObject({ unified: "stop" });
 		expect(usage).toMatchObject({
-			inputTokens: { total: 10251 },
+			inputTokens: { total: 17663, noCache: 10251 },
 			outputTokens: { total: 46 },
 		});
 		// reasoning first, then text
@@ -1526,15 +1526,16 @@ describe("mapUsage", () => {
 				outputTokens: 20,
 				cacheReadTokens: 80,
 				cacheWriteTokens: 5,
+				reasoningTokens: 7,
 			}),
 		).toEqual({
 			inputTokens: {
-				total: 100,
-				noCache: undefined,
+				total: 185,
+				noCache: 100,
 				cacheRead: 80,
 				cacheWrite: 5,
 			},
-			outputTokens: { total: 20, text: undefined, reasoning: undefined },
+			outputTokens: { total: 20, text: undefined, reasoning: 7 },
 		});
 	});
 });

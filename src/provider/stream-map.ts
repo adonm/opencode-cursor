@@ -1029,15 +1029,18 @@ export const EMPTY_USAGE: LanguageModelV3Usage = {
 export function mapUsage(usage: CursorUsage): LanguageModelV3Usage {
 	return {
 		inputTokens: {
-			total: usage.inputTokens,
-			noCache: undefined,
+			total:
+				usage.inputTokens +
+				usage.cacheReadTokens +
+				usage.cacheWriteTokens,
+			noCache: usage.inputTokens,
 			cacheRead: usage.cacheReadTokens,
 			cacheWrite: usage.cacheWriteTokens,
 		},
 		outputTokens: {
 			total: usage.outputTokens,
 			text: undefined,
-			reasoning: undefined,
+			reasoning: usage.reasoningTokens,
 		},
 	};
 }

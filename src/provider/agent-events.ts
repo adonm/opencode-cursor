@@ -14,6 +14,7 @@ export interface CursorUsage {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  reasoningTokens?: number;
 }
 
 /** Normalized events bridged from the Cursor SDK's push callbacks. */
@@ -80,11 +81,15 @@ export class CursorRunError extends Error {
 export function addUsage(a?: CursorUsage, b?: CursorUsage): CursorUsage | undefined {
   if (!a) return b;
   if (!b) return a;
+  const hasReasoning = a.reasoningTokens !== undefined || b.reasoningTokens !== undefined;
   return {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
     cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    ...(hasReasoning
+      ? { reasoningTokens: (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0) }
+      : {}),
   };
 }
 

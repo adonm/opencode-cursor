@@ -155,24 +155,24 @@ describe("streamAgentTurn busy-agent recovery", () => {
 describe("silent-turn usage capture", () => {
 	it("sendAgentTurnSilently captures turn-ended usage", async () => {
 		const agent = fakeAgent({
-			updates: [{ type: "turn-ended", usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 1, cacheWriteTokens: 2 } }],
+			updates: [{ type: "turn-ended", usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 1, cacheWriteTokens: 2, reasoningTokens: 3 } }],
 		});
 		const usage = await sendAgentTurnSilently(agent, MESSAGE, { mode: "agent" });
-		expect(usage).toEqual({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 1, cacheWriteTokens: 2 });
+		expect(usage).toEqual({ inputTokens: 10, outputTokens: 5, cacheReadTokens: 1, cacheWriteTokens: 2, reasoningTokens: 3 });
 	});
 
 	it("streamAgentTurn adds usageBase to turn-ended usage", async () => {
 		const agent = fakeAgent({
-			updates: [{ type: "turn-ended", usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 } }],
+			updates: [{ type: "turn-ended", usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, reasoningTokens: 3 } }],
 		});
 		const events = await collect(streamAgentTurn(agent, MESSAGE, {
 			mode: "agent",
-			usageBase: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 3, cacheWriteTokens: 4 },
+			usageBase: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 3, cacheWriteTokens: 4, reasoningTokens: 7 },
 		}));
 		const usage = events.find((e) => e.type === "usage");
 		expect(usage).toEqual({
 			type: "usage",
-			usage: { inputTokens: 110, outputTokens: 55, cacheReadTokens: 3, cacheWriteTokens: 4 },
+			usage: { inputTokens: 110, outputTokens: 55, cacheReadTokens: 3, cacheWriteTokens: 4, reasoningTokens: 10 },
 		});
 	});
 });
