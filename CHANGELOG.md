@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-21
+
+Live Cursor subagent activity: the `task` card behaves like a native opencode
+subagent card — navigable while running, with a live activity subtitle — and
+the child session carries the subagent's full transcript (#99).
+
 - **Cursor subagent transcripts in the TUI subagent view.** The child session
   created for a Cursor subagent (`task` tool) is now seeded with the subagent's
   own activity — its assistant text, thinking, and tool calls with args and
